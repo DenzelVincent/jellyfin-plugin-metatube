@@ -20,7 +20,17 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <TargetFramework Condition="'$(Configuration)'=='Debug' or '$(Configuration)'=='Release'">net9.0</TargetFramework>
+        <!--
+          Jellyfin SDK 版本与目标框架成对切换：12.x 的包只 supports net10.0，
+          只换版本不换框架会直接 NU1202（设计 V3 补测）。默认值就是当前发布基线，
+          属性化只是把「换版本试编」从改代码变成传参，不改任何发布产物。
+        -->
+        <JellyfinSdkVersion>10.11.0</JellyfinSdkVersion>
+        <JellyfinTargetFramework>net9.0</JellyfinTargetFramework>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <TargetFramework Condition="'$(Configuration)'=='Debug' or '$(Configuration)'=='Release'">$(JellyfinTargetFramework)</TargetFramework>
         <!--
           Emby 4.8.x / 4.9.x still run on .NET 6 (e.g. "Framework: .NET 6.0.36"),
           so a net8.0 plugin assembly silently fails to load and never shows up
@@ -39,8 +49,8 @@
     </ItemGroup>
 
     <ItemGroup Condition="'$(Configuration)'=='Debug' or '$(Configuration)'=='Release'">
-        <PackageReference Include="Jellyfin.Controller" Version="10.11.0"/>
-        <PackageReference Include="Jellyfin.Model" Version="10.11.0"/>
+        <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinSdkVersion)"/>
+        <PackageReference Include="Jellyfin.Model" Version="$(JellyfinSdkVersion)"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(Configuration)'=='Debug.Emby' or '$(Configuration)'=='Release.Emby'">
