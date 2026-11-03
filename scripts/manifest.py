@@ -37,13 +37,30 @@ def md5sum_url(url: str) -> str:
     return digest.hexdigest()
 
 
+def resolve_version(root, version: str) -> str:
+    """Resolve a property-ised package version like "$(JellyfinSdkVersion)".
+
+    Never fall back to a hard-coded default: targetAbi must describe the build
+    that actually happened.
+    """
+    if not version.startswith("$("):
+        return version
+
+    name = version[2:-1]
+    for prop in root.iter(name):
+        if prop.text and prop.text.strip():
+            return prop.text.strip()
+
+    raise Exception(f"Cannot resolve {version} for the Jellyfin package version")
+
+
 def get_jellyfin_version(csproj: str) -> str:
     tree = ET.parse(csproj)
     root = tree.getroot()
 
     for pkg in root.iter("PackageReference"):
         if pkg.attrib.get("Include") in ("Jellyfin.Controller", "Jellyfin.Model"):
-            return Version(pkg.attrib.get("Version")).base_version
+            return Version(resolve_version(root, pkg.attrib.get("Version"))).base_version
 
     raise Exception("Jellyfin version not found")
 
