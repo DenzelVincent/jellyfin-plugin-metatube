@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Text;
 using Jellyfin.Plugin.MetaTube.Configuration;
+using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Metadata;
 
 namespace Jellyfin.Plugin.MetaTube.Translation;
@@ -43,6 +44,35 @@ public static class TranslationHelper
         if (Configuration.TranslationMode.HasFlag(TranslationMode.Summary) &&
             !string.IsNullOrWhiteSpace(m.Summary) && !ShouldSkipTranslation(m.Summary, to))
             m.Summary = await TranslateFieldSafeAsync(m.Summary, to, cancellationToken, log).ConfigureAwait(false);
+
+        if (Configuration.EnableSeriesTranslation &&
+            !string.IsNullOrWhiteSpace(m.Series))
+            m.Series = await TranslateSeriesAsync(m.Series, to, cancellationToken, log).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 系列名单独一条链路：先查持久化对照表，命中就不再调引擎（含「表值为空 = 保留原文」）。
+    /// 合集名、系列标签与 {series} 模板变量都取这一个值，所以译法必须每次都一样。
+    /// </summary>
+    private static async Task<string> TranslateSeriesAsync(string series, string to,
+        CancellationToken cancellationToken, Action<string> log)
+    {
+        if (SeriesTranslationStore.TryGetValue(series, out var cached))
+            return string.IsNullOrWhiteSpace(cached) ? series : cached;
+
+        // 目标语言是中文且系列名已含汉字（iqqtv/airav 直接给中文系列名）时省一次调用。
+        if (ShouldSkipTranslation(series, to))
+            return series;
+
+        var translated = await TranslateFieldSafeAsync(series, to, cancellationToken, log).ConfigureAwait(false);
+        // 引擎失败时 TranslateFieldSafeAsync 原样返回，此时不写表，免得把原文当译文固化下来。
+        if (string.IsNullOrWhiteSpace(translated) || translated == series)
+            return series;
+
+#if !__EMBY__
+        SeriesTranslationStore.Persist(series, translated, log);
+#endif
+        return translated;
     }
 
     /// <summary>
