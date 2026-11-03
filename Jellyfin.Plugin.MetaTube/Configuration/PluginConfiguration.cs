@@ -318,6 +318,20 @@ public class PluginConfiguration : BasePluginConfiguration
     public string OpenAiModel { get; set; } = string.Empty;
 
 #if __EMBY__
+    [DisplayName("翻译系列名")]
+    [Description("翻译系列名；合集名、系列标签与 {series} 模板变量都会跟着变成译文。")]
+#endif
+    public bool EnableSeriesTranslation { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("系列译文对照表")]
+    [Description(
+        "每行一条记录，用等号分隔，例如 系列原名=译文；等号右侧留空表示保留原文。表内命中就不再调用翻译引擎。")]
+    [EditMultiline(5)]
+#endif
+    public string RawSeriesTranslationTable { get; set; } = string.Empty;
+
+#if __EMBY__
     [DisplayName("启用标题替换")]
 #endif
     public bool EnableTitleSubstitution { get; set; } = false;
