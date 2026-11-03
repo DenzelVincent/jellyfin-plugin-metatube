@@ -109,8 +109,9 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         if (Configuration.EnableGenreSubstitution)
             m.Genres = Configuration.GetGenreSubstitutionTable().Substitute(m.Genres).ToArray();
 
-        // Translate movie info.
-        if (Configuration.TranslationMode != TranslationMode.Disabled)
+        // Translate movie info. 只开「翻译系列名」而翻译模式为禁用时也要进来，
+        // 具体翻不翻标题/简介由 TranslationHelper 里的 TranslationMode 判断。
+        if (Configuration.TranslationMode != TranslationMode.Disabled || Configuration.EnableSeriesTranslation)
             await TranslateMovieInfo(m, info.MetadataLanguage, cancellationToken);
 
         // Distinct and clean blank list
