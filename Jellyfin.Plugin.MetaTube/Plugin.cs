@@ -36,7 +36,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     public override string Name => ProviderName;
 
-    public override string Description => "MetaTube Plugin for Jellyfin/Emby";
+    public override string Description => "MetaTube 元数据插件（Jellyfin/Emby），数据由 MetaTube 服务端提供";
 
     public override Guid Id => Guid.Parse("01cc53ec-c415-4108-bbd4-a684a9801a32");
 

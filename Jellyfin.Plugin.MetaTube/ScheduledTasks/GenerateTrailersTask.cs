@@ -47,9 +47,9 @@ public class GenerateTrailersTask : IScheduledTask
 
     public string Key => $"{Plugin.ProviderName}GenerateTrailers";
 
-    public string Name => "Generate Trailers";
+    public string Name => "生成预告片";
 
-    public string Description => $"Generates video trailers provided by {Plugin.ProviderName} in library.";
+    public string Description => $"为库内影片生成 {Plugin.ProviderName} 的 strm 格式在线预告片。";
 
     public string Category => Plugin.ProviderName;
 
