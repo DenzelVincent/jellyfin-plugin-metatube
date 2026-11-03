@@ -102,8 +102,7 @@ public class SyncActorCollectionsTask : IScheduledTask
         _logger.Debug("Actor pid hits: {0} of {1} actor references", pidHits, refs.Count);
 
         var groups = ActorCollectionSync.Build(refs);
-        // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值为 "MetaTube"），
-        // 不是 pid 里的来源段（javbus 等）——传错会静默建出没 pid 的合集。
+        // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
         var index = new ActorCollectionSync.Index(_libraryManager.ReadCollections(Plugin.ProviderId));
 
         var created = 0;
