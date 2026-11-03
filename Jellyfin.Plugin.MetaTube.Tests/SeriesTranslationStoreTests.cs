@@ -73,4 +73,28 @@ public class SeriesTranslationStoreTests
 
         Assert.Equal("甲A", SeriesTranslationStore.Lookup(raw, "A", out var target) ? target : null);
     }
+
+    [Fact]
+    // 已有的 `Append_IsIdempotentForSameKeyAndValue` 只有一行表，`Append` 里那条
+    // 「键值相同就原样返回」的分支被 `table.ToString()` 重写整串也测不出来。
+    // 这里用两行表钉死：命中已有键值对时**整串一字不改**，否则每张影片刮完都要重写一遍 config.xml。
+    public void Append_LeavesMultiRowTableUntouched()
+    {
+        var raw = "A=甲\nB=乙";
+
+        Assert.Equal(raw, SeriesTranslationStore.Append(raw, "B", "乙"));
+        Assert.Equal(raw, SeriesTranslationStore.Append(raw, "a", "甲"));
+    }
+
+    [Fact]
+    // 另一半：新键必须照常追加，不能把「不改写」做成一刀切。
+    // 不比对整串顺序（Dictionary 的枚举顺序不是契约），只验条数与查得到。
+    public void Append_AddsNewKeyToMultiRowTable()
+    {
+        var raw = SeriesTranslationStore.Append("A=甲\nB=乙", "C", "丙");
+
+        Assert.Equal(3, raw.Split('\n').Length);
+        Assert.True(SeriesTranslationStore.Lookup(raw, "C", out var target));
+        Assert.Equal("丙", target);
+    }
 }

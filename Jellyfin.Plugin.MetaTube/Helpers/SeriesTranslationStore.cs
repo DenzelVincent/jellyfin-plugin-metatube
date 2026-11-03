@@ -34,7 +34,9 @@ public static class SeriesTranslationStore
             return raw ?? string.Empty;
 
         var table = SubstitutionTable.Parse(raw);
-        if (table.TryGetValue(source, out var existing) && string.Equals(existing, target, StringComparison.Ordinal))
+        // 表值用 OrdinalIgnoreCase，与 SubstitutionTable 的键比较器同口径：键按大小写不敏感命中、
+        // 值却按敏感比较，引擎这次给 "Abp" 下次给 "ABP" 就会来回改写同一行，合集名跟着裂（D14 要堵的正是这个）。
+        if (table.TryGetValue(source, out var existing) && string.Equals(existing, target, StringComparison.OrdinalIgnoreCase))
             return raw ?? string.Empty;
 
         table[source] = target;
