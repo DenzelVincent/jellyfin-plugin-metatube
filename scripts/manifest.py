@@ -11,11 +11,11 @@ from urllib.request import Request, urlopen
 
 from packaging.version import Version
 
-# The repository that owns the plugin, e.g. "metatube-community/jellyfin-plugin-metatube".
-# GitHub Actions sets GITHUB_REPOSITORY automatically, so a fork publishes a
-# manifest that points at its own releases instead of the upstream ones.
+# The repository that owns this fork's builds. GitHub Actions sets
+# GITHUB_REPOSITORY automatically; the default below is what a local run uses,
+# so it must point at the fork, not at upstream.
 REPOSITORY = os.environ.get('GITHUB_REPOSITORY',
-                            'metatube-community/jellyfin-plugin-metatube')
+                            'DenzelVincent/jellyfin-plugin-metatube')
 
 SOURCE_URL = ('https://github.com/{repository}/releases/download/'
               'v{version}/Jellyfin.MetaTube@v{version}.zip')

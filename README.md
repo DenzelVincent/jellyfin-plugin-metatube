@@ -9,23 +9,23 @@
 <br/>
 <br/>
 
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube/actions">
-<img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/metatube-community/jellyfin-plugin-metatube/dotnetcore.yml?branch=main&logo=github">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube/actions">
+<img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/DenzelVincent/jellyfin-plugin-metatube/dotnetcore.yml?branch=main&logo=github">
 </a>
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube/search?l=c%23">
-<img alt="GitHub top language" src="https://img.shields.io/github/languages/top/metatube-community/jellyfin-plugin-metatube?color=%23239120&label=.NET&logo=csharp">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube/search?l=c%23">
+<img alt="GitHub top language" src="https://img.shields.io/github/languages/top/DenzelVincent/jellyfin-plugin-metatube?color=%23239120&label=.NET&logo=csharp">
 </a>
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube/blob/main/LICENSE">
-<img alt="License" src="https://img.shields.io/github/license/metatube-community/jellyfin-plugin-metatube">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube/blob/main/LICENSE">
+<img alt="License" src="https://img.shields.io/github/license/DenzelVincent/jellyfin-plugin-metatube">
 </a>
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube">
-<img alt="gitHub Stars" src="https://img.shields.io/github/stars/metatube-community/jellyfin-plugin-metatube?style=flat">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube">
+<img alt="gitHub Stars" src="https://img.shields.io/github/stars/DenzelVincent/jellyfin-plugin-metatube?style=flat">
 </a>
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube">
-<img alt="Downloads" src="https://img.shields.io/github/downloads/metatube-community/jellyfin-plugin-metatube/total">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube">
+<img alt="Downloads" src="https://img.shields.io/github/downloads/DenzelVincent/jellyfin-plugin-metatube/total">
 </a>
-<a href="https://github.com/metatube-community/jellyfin-plugin-metatube/releases">
-<img alt="Releases" src="https://img.shields.io/github/v/release/metatube-community/jellyfin-plugin-metatube?include_prereleases&logo=smartthings">
+<a href="https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases">
+<img alt="Releases" src="https://img.shields.io/github/v/release/DenzelVincent/jellyfin-plugin-metatube?include_prereleases&logo=smartthings">
 </a>
 </p>
 
@@ -115,8 +115,8 @@ Welcome and feel free to ask any questions at [Discussions](https://github.com/m
 
 ## Licence
 
-This plugin is released under the [MIT](https://github.com/metatube-community/jellyfin-plugin-metatube/blob/main/LICENSE) License.
+This plugin is released under the [MIT](https://github.com/DenzelVincent/jellyfin-plugin-metatube/blob/main/LICENSE) License.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=metatube-community/jellyfin-plugin-metatube&type=Date)](https://star-history.com/#metatube-community/jellyfin-plugin-metatube&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=DenzelVincent/jellyfin-plugin-metatube&type=Date)](https://star-history.com/#DenzelVincent/jellyfin-plugin-metatube&Date)
