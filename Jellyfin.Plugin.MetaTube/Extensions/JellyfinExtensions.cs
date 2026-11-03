@@ -78,8 +78,8 @@ public static class JellyfinExtensions
                 Name = box.Name,
                 Provider = pid.Provider,
                 ActorId = pid.Id,
-                // 本仓库没开可空注解，LinkedChildren 是普通数组属性，老数据/别的插件建的合集可能带 null 进来，
-                // 这里按空集处理即「成员为空」，与「合集确实没成员」同口径，不能让整个扫描抛 NRE。
+                // 本仓库没开可空注解，服务端这里可能给回 null（与 ActorCollectionSync 里同一条口径），
+                // 按空集处理即「成员为空」，不能让整个扫描抛 NullReferenceException。
                 MemberIds = new HashSet<Guid>((box.LinkedChildren ?? Array.Empty<LinkedChild>())
                     .Where(c => c.ItemId.HasValue)
                     .Select(c => c.ItemId.Value))
