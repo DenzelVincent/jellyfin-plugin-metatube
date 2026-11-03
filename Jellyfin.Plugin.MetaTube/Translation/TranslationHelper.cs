@@ -65,14 +65,26 @@ public static class TranslationHelper
             return series;
 
         var translated = await TranslateFieldSafeAsync(series, to, cancellationToken, log).ConfigureAwait(false);
+        // 先裁再比对：不裁的话 " 甲 " != "甲" 会被当成一次成功翻译，把带空白的串当译文入库。
+        translated = translated?.Trim();
         // 引擎失败时 TranslateFieldSafeAsync 原样返回，此时不写表，免得把原文当译文固化下来。
         if (string.IsNullOrWhiteSpace(translated) || translated == series)
             return series;
 
+        // 译文要直接当合集名用，带换行就存不进按行存的译文表、也建不出正常合集；宁可保留原文。
+        if (translated.Contains('\n') || translated.Contains('\r'))
+        {
+            log($"Translated series contains line breaks, keep original: {series}");
+            return series;
+        }
+
 #if !__EMBY__
-        SeriesTranslationStore.Persist(series, translated, log);
-#endif
+        // 生效译文可能不是引擎这次给的：同一系列的另一部影片可能已经先写了一行（Persist 先到先得）。
+        var effective = SeriesTranslationStore.Persist(series, translated, log);
+        return string.IsNullOrWhiteSpace(effective) ? series : effective;
+#else
         return translated;
+#endif
     }
 
     /// <summary>

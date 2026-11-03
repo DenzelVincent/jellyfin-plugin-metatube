@@ -21,16 +21,24 @@ public static class SeriesTranslationStore
     public static bool Lookup(string raw, string source, out string target)
     {
         target = null;
-        if (string.IsNullOrWhiteSpace(raw) || string.IsNullOrEmpty(source))
+        if (string.IsNullOrWhiteSpace(raw) || string.IsNullOrWhiteSpace(source))
             return false;
 
-        return SubstitutionTable.Parse(raw).TryGetValue(source, out target);
+        // 键要先裁再查：表里的键是 Parse 裁过的（`SubstitutionTable.cs:18`），
+        // 拿没裁的原文去查，带空白的系列名永远 miss。
+        return SubstitutionTable.Parse(raw).TryGetValue(source.Trim(), out target);
     }
 
-    /// <summary>纯追加/替换一行，幂等：键值都相同时原样返回入参。</summary>
+    /// <summary>纯追加/替换一行，幂等：键值都相同时原样返回入参。含换行的键或值直接拒绝入表。</summary>
     public static string Append(string raw, string source, string target)
     {
-        if (string.IsNullOrEmpty(source))
+        source = source?.Trim();
+        target = target?.Trim();
+
+        // 表是按行存的：Parse 逐行读、ToString 用 \n 拼。键或值里带换行就会写出多余的行，
+        // 那行会被下次 Parse 读成「没有等号」的键——等于凭空多出一条「保留原文」的记录，只能手改 config.xml 才清得掉。
+        if (string.IsNullOrEmpty(source) || source.Contains('\n') || source.Contains('\r') ||
+            target != null && (target.Contains('\n') || target.Contains('\r')))
             return raw ?? string.Empty;
 
         var table = SubstitutionTable.Parse(raw);
@@ -51,7 +59,7 @@ public static class SeriesTranslationStore
     public static bool TryGetValue(string source, out string target)
     {
         target = null;
-        if (string.IsNullOrEmpty(source))
+        if (string.IsNullOrWhiteSpace(source))
             return false;
 
         lock (Sync)
@@ -63,36 +71,51 @@ public static class SeriesTranslationStore
                 _raw = raw;
             }
 
-            return _table.TryGetValue(source, out target);
+            return _table.TryGetValue(source.Trim(), out target);
         }
     }
 
 #if !__EMBY__
     /// <summary>
     /// 把引擎新译的结果写回配置，下一轮刮削直接命中、不再调用引擎。
-    /// 刮削是并发的，「读当前 raw → 追加一行 → 整体写回」必须在同一个锁里做完（设计 V8）。
+    /// 返回值是「真正生效的译文」：入库名必须与表里那行一致，否则同系列的多部影片会裂成两个合集（设计 D14）。
+    /// 刮削是并发的，「读当前 raw → 判断 → 追加一行 → 整体写回」必须在同一个锁里做完（设计 V8）。
     /// Emby 端不做自动回写：BasePluginSimpleUI 怎么从刮削线程持久化配置没验证过（设计 4.4）。
     /// </summary>
-    public static void Persist(string source, string target, Action<string> log)
+    public static string Persist(string source, string target, Action<string> log)
     {
         try
         {
             lock (Sync)
             {
                 var config = Plugin.Instance.Configuration;
-                var raw = Append(config.RawSeriesTranslationTable, source, target);
-                if (raw == config.RawSeriesTranslationTable)
-                    return;
+                var raw = config.RawSeriesTranslationTable ?? string.Empty;
 
-                config.RawSeriesTranslationTable = raw;
-                Plugin.Instance.UpdateConfiguration(config);
-                log?.Invoke($"Persist series translation: {source} => {target}");
+                // 能走到这里说明查表时还没有这一行；现在有了就是另一个并发线程先写完，采用先到的译文。
+                // 同一次全库刷新里，一个系列的十几部影片并发走到这条链路是常态而不是边角。
+                // 表值为空或 null 同样不覆盖：那是用户「这个系列保留原文」的显式意图。
+                if (Lookup(raw, source, out var existing))
+                {
+                    log?.Invoke($"Series translation row appeared meanwhile, reuse it: {source} => {existing}");
+                    return existing;
+                }
+
+                var next = Append(raw, source, target);
+                if (next != raw)
+                {
+                    config.RawSeriesTranslationTable = next;
+                    Plugin.Instance.UpdateConfiguration(config);
+                    log?.Invoke($"Persist series translation: {source} => {target}");
+                }
+
+                return target;
             }
         }
         catch (Exception e)
         {
             // 持久化失败只影响下次要不要再调一次引擎，不改变本次刮削结果。
             log?.Invoke($"Persist series translation failed: {e.Message}");
+            return target;
         }
     }
 #endif

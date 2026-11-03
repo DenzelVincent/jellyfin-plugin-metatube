@@ -97,4 +97,35 @@ public class SeriesTranslationStoreTests
         Assert.True(SeriesTranslationStore.Lookup(raw, "C", out var target));
         Assert.Equal("丙", target);
     }
+
+    [Fact]
+    // 表里的键与值都是 Parse/ToString 裁过的（`SubstitutionTable.cs:18,39`），入表前不裁就会出现
+    // 「写进去是 B=乙、拿 " B " 查永远 miss」，每张影片都白调一次引擎。
+    public void Append_TrimsKeyAndValueBeforeStoring()
+    {
+        var raw = SeriesTranslationStore.Append("A=甲", " B ", " 乙 ");
+
+        Assert.True(SeriesTranslationStore.Lookup(raw, "B", out var target));
+        Assert.Equal("乙", target);
+        Assert.Equal(raw, SeriesTranslationStore.Append(raw, "B", "乙"));
+    }
+
+    [Fact]
+    // 表按行存：含换行的键或值会写出多余的行，下次 Parse 把它读成「没有等号 = 保留原文」的键，
+    // 只能手改 config.xml 才清得掉。这种行必须整个拒收，原串一字不改。
+    public void Append_RejectsLineBreaksInKeyOrValue()
+    {
+        Assert.Equal("A=甲", SeriesTranslationStore.Append("A=甲", "B\nC", "丁"));
+        Assert.Equal("A=甲", SeriesTranslationStore.Append("A=甲", "B", "丁\n戊"));
+        Assert.Equal("A=甲", SeriesTranslationStore.Append("A=甲", "B", "丁\r\n戊"));
+    }
+
+    [Fact]
+    // 与 Append 的裁键对称：查表也要先裁，否则带空白的系列名永远走 miss 分支。
+    public void Lookup_TrimsSourceBeforeMatching()
+    {
+        Assert.True(SeriesTranslationStore.Lookup("A=甲", " A ", out var target));
+        Assert.Equal("甲", target);
+        Assert.False(SeriesTranslationStore.Lookup("A=甲", "   ", out _));
+    }
 }
