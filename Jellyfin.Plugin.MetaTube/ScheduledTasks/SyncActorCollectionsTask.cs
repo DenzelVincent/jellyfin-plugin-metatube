@@ -5,7 +5,6 @@ using Jellyfin.Plugin.MetaTube.Helpers;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -101,6 +100,12 @@ public class SyncActorCollectionsTask : IScheduledTask
         // MovieProvider.SetActorImageUrl 的做法——用 ApiClient.SearchActorAsync(显示名) 现搜。
         _logger.Debug("Actor pid hits: {0} of {1} actor references", pidHits, refs.Count);
 
+        // 设计 4.5 要「pid 缺失记 Warn」，但库里演员成千上万，逐个 Warn 会把日志冲干净，
+        // 所以整轮只发一条：全 0 就是 V5 的最坏情况——服务端回读没带上 pid，封面解析不了。
+        if (refs.Count > 0 && pidHits == 0)
+            _logger.Warn("No MetaTube pid found on {0} actor references, so actor covers cannot resolve " +
+                         "(design V5 fallback applies)", refs.Count);
+
         var groups = ActorCollectionSync.Build(refs);
         // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
         var index = new ActorCollectionSync.Index(_libraryManager.ReadCollections(Plugin.ProviderId));
@@ -170,6 +175,11 @@ public class SyncActorCollectionsTask : IScheduledTask
             }).ConfigureAwait(false);
 
             _logger.Info("Create actor collection: {0} ({1} movies)", plan.Name, plan.AddItemIds.Count);
+
+            // 「pid 缺失」的另一种（设计 4.5）：这位演员一条 pid 都没刮到，合集建得出来、封面解析不了。
+            // 只在建立时记一次，避免每轮对齐都刷屏。
+            if (string.IsNullOrEmpty(plan.ActorId))
+                _logger.Warn("Created actor collection without actor pid: {0}", plan.Name);
 
             // 不把服务端对 ItemIdList 的处理当唯一依据：成员数对不上就补一次，本身幂等。
             var missing = plan.AddItemIds.Where(id => !box.LinkedChildren.Any(c => c.ItemId == id)).ToList();
