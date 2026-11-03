@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import copy
 import hashlib
 import json
 import os
@@ -22,6 +23,22 @@ IMAGE_URL = ('https://raw.githubusercontent.com/{repository}/'
              'main/Jellyfin.Plugin.MetaTube/thumb.png')
 MANIFEST_URL = ('https://raw.githubusercontent.com/{repository}/dist/manifest.json')
 RELEASES_API = ('https://api.github.com/repos/{repository}/releases?per_page=100')
+
+# Fallback for the very first publish of a fork: the dist branch does not
+# exist yet, so there is nothing to load. The guid must stay identical to
+# Plugin.Id (Jellyfin.Plugin.MetaTube/Plugin.cs), otherwise the server would
+# treat this as a different plugin.
+SKELETON = [{
+    'guid': '01cc53ec-c415-4108-bbd4-a684a9801a32',
+    'name': 'MetaTube',
+    'description': 'MetaTube 元数据插件（个人分支）：按系列与演员自动创建合集、'
+                   '中文字幕与无码破解角标、字段级聚合与翻译。',
+    'overview': 'Jellyfin/Emby 元数据插件，依赖 MetaTube Server 提供数据。',
+    'owner': 'DenzelVincent',
+    'category': 'Metadata',
+    'imageUrl': '',
+    'versions': []
+}]
 
 
 def md5sum(filename) -> str:
@@ -93,6 +110,22 @@ def get_releases() -> list:
     return result
 
 
+def load_manifest() -> list:
+    """Published manifest, or the built-in skeleton when it is unreachable.
+
+    A fork's first publish has no dist branch yet, and a network hiccup must
+    not abort a release that already built successfully.
+    """
+    try:
+        with urlopen(MANIFEST_URL.format(repository=REPOSITORY), timeout=30) as f:
+            return json.load(f)
+    except (URLError, OSError, ValueError) as e:
+        # HTTPError 是 URLError 的子类；JSON 解析失败走 ValueError。
+        print(f'warning: published manifest unavailable, using skeleton: {e}',
+              file=sys.stderr)
+        return copy.deepcopy(SKELETON)
+
+
 def main() -> None:
     filename = sys.argv[1]
     version = filename.split('@', maxsplit=1)[1] \
@@ -102,8 +135,7 @@ def main() -> None:
     csproj = os.path.join(os.path.dirname(__file__),
                           "../Jellyfin.Plugin.MetaTube/Jellyfin.Plugin.MetaTube.csproj")
 
-    with urlopen(MANIFEST_URL.format(repository=REPOSITORY), timeout=30) as f:
-        manifest = json.load(f)
+    manifest = load_manifest()
 
     plugin = manifest[0]
     plugin['imageUrl'] = IMAGE_URL.format(repository=REPOSITORY)
