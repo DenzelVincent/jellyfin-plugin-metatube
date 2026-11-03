@@ -204,7 +204,7 @@ public static class ActorCollectionSync
                     Name = group.DisplayName,
                     Provider = group.Provider,
                     ActorId = group.ActorId,
-                    SkipReason = $"{group.DisplayName}: 影片数 {group.MovieIds.Count} 低于最小片数阈值 {threshold}"
+                    SkipReason = $"{group.DisplayName}: {group.MovieIds.Count} movie(s) below minimum count {threshold}"
                 };
 
             return new SyncPlan

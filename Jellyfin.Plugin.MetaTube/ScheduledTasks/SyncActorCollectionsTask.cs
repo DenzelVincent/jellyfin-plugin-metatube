@@ -182,7 +182,9 @@ public class SyncActorCollectionsTask : IScheduledTask
                 _logger.Warn("Created actor collection without actor pid: {0}", plan.Name);
 
             // 不把服务端对 ItemIdList 的处理当唯一依据：成员数对不上就补一次，本身幂等。
-            var missing = plan.AddItemIds.Where(id => !box.LinkedChildren.Any(c => c.ItemId == id)).ToList();
+            // LinkedChildren 可能为 null，口径与 ReadCollections 一致。
+            var children = box.LinkedChildren ?? Array.Empty<LinkedChild>();
+            var missing = plan.AddItemIds.Where(id => !children.Any(c => c.ItemId == id)).ToList();
             if (missing.Count > 0)
                 await _collectionManager.AddToCollectionAsync(box.Id, missing).ConfigureAwait(false);
 
@@ -193,10 +195,6 @@ public class SyncActorCollectionsTask : IScheduledTask
             return ActorCollectionSync.SyncAction.None;
 
         var collectionId = plan.CollectionId.Value;
-
-        if (plan.NeedsProviderId)
-            await _libraryManager.EnsureCollectionPidAsync(collectionId, plan.Provider, plan.ActorId, _logger,
-                cancellationToken).ConfigureAwait(false);
 
         if (plan.AddItemIds.Count > 0)
         {
@@ -210,6 +208,13 @@ public class SyncActorCollectionsTask : IScheduledTask
                 .ConfigureAwait(false);
             _logger.Info("Remove {0} movie(s) from actor collection: {1}", plan.RemoveItemIds.Count, plan.Name);
         }
+
+        // pid 写在成员对齐之后：EnsureCollectionPidAsync 是「读整个合集 → 改 ProviderIds → 回写」，
+        // 排在前面时它的快照早于本轮增删，回写有覆盖掉刚改完的成员的风险；成员失败中断时也不会留下
+        // 「pid 已写但其实没对齐」的状态。
+        if (plan.NeedsProviderId)
+            await _libraryManager.EnsureCollectionPidAsync(collectionId, plan.Provider, plan.ActorId, _logger,
+                cancellationToken).ConfigureAwait(false);
 
         return plan.Action;
     }
