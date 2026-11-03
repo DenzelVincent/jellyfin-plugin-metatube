@@ -59,6 +59,7 @@ public static class ActorCollectionSync
     {
         public SyncAction Action { get; init; }
 
+        /// <summary>要用的合集名：Create 时按它建；Update 时写入方不许把它赋给已有合集（设计 4.2 第 95 行，用户改名要尊重）。</summary>
         public string Name { get; init; } = string.Empty;
 
         public string Provider { get; init; } = string.Empty;
@@ -74,6 +75,9 @@ public static class ActorCollectionSync
 
         /// <summary>同名命中但合集上没有 pid，需要补写，供 CollectionImageProvider 解析封面。</summary>
         public bool NeedsProviderId { get; init; }
+
+        /// <summary>同名命中且两边都带 pid、pid 还不一致：两位演员撞舞台名在这里是常态，写入方要据此记 Warn（设计 4.5）。</summary>
+        public bool NameConflict { get; init; }
 
         /// <summary>非空表示本轮跳过这位演员的原因（只由最小片数阈值门控产生）。</summary>
         public string SkipReason { get; init; } = string.Empty;
@@ -101,7 +105,8 @@ public static class ActorCollectionSync
             // 键是显示名而不是 pid：同一演员在库里完全可能一部分影片带 pid、一部分不带
             // （MovieProvider.SetActorImageUrl 只在演员有照片时才 SetPid），
             // 按 pid 分组会把这位演员裂成两个合集。
-            if (group.ActorId.Length == 0 && !string.IsNullOrEmpty(r.Provider) && !string.IsNullOrEmpty(r.ActorId))
+            if (string.IsNullOrEmpty(group.ActorId) && !string.IsNullOrEmpty(r.Provider) &&
+                !string.IsNullOrEmpty(r.ActorId))
             {
                 group.Provider = r.Provider;
                 group.ActorId = r.ActorId;
@@ -130,7 +135,11 @@ public static class ActorCollectionSync
     /// </summary>
     public sealed class Index
     {
-        private readonly Dictionary<string, ExistingCollection> _byPid = new(StringComparer.OrdinalIgnoreCase);
+        // pid 索引拆成两段分别比：外层 provider 段大小写不敏感，与 Jellyfin 取 provider id 的口径一致
+        // （ProviderIdsExtensions 直接拿 provider 名查，不区分大小写）；内层演员 id 段按序数比较，
+        // 因为 id 的大小写是数据本身——整串 OrdinalIgnoreCase 会让只差大小写的 j-9 与 J-9 并成一个合集。
+        private readonly Dictionary<string, Dictionary<string, ExistingCollection>> _byPid =
+            new(StringComparer.OrdinalIgnoreCase);
 
         // 键已经是 GroupKey 后的小写名，用默认序数比较即可。
         private readonly Dictionary<string, ExistingCollection> _byName = new();
@@ -140,7 +149,14 @@ public static class ActorCollectionSync
             foreach (var c in collections)
             {
                 if (!string.IsNullOrEmpty(c.ActorId))
-                    _byPid.TryAdd(EncodePid(c.Provider, c.ActorId), c);
+                {
+                    var provider = c.Provider ?? string.Empty;
+                    if (!_byPid.TryGetValue(provider, out var byId))
+                        _byPid[provider] = byId = new Dictionary<string, ExistingCollection>();
+                    // 同一个 pid 挂在多个合集上时只认第一个，保证重复运行对齐的是同一个合集。
+                    byId.TryAdd(c.ActorId, c);
+                }
+
                 _byName.TryAdd(GroupKey(c.Name), c);
             }
         }
@@ -148,9 +164,22 @@ public static class ActorCollectionSync
         /// <summary>先按 pid（尊重用户改名，只对齐成员不改名），再按同名（复用用户手建的合集并补写 pid）。</summary>
         public ExistingCollection Find(ActorGroup group)
         {
+            return Find(group, out _);
+        }
+
+        /// <summary>
+        /// 同上，并告知命中方式是 pid 还是同名：同名命中且两边 pid 不一致就是撞名，写入方要记 Warn（设计 4.5）。
+        /// </summary>
+        public ExistingCollection Find(ActorGroup group, out bool byPid)
+        {
+            byPid = false;
             if (!string.IsNullOrEmpty(group.ActorId) &&
-                _byPid.TryGetValue(EncodePid(group.Provider, group.ActorId), out var byPid))
-                return byPid;
+                _byPid.TryGetValue(group.Provider ?? string.Empty, out var byId) &&
+                byId.TryGetValue(group.ActorId, out var pidHit))
+            {
+                byPid = true;
+                return pidHit;
+            }
 
             return _byName.TryGetValue(group.Key, out var byName) ? byName : null;
         }
@@ -189,11 +218,20 @@ public static class ActorCollectionSync
             };
         }
 
-        var add = group.MovieIds.Except(existing.MemberIds).OrderBy(id => id).ToList();
-        // 只移除本次扫描范围内的影片：合集里手工加入的其它条目（别的库、别的来源）一律不动，
+        var members = existing.MemberIds ?? new HashSet<Guid>();
+        // 扫描范围同样可能收到 null（本仓库没开可空引用注解，服务端的 LinkedChildren 实际可空），
+        // 按空集处理即「什么都不移除」，与「什么都没扫到」同口径。
+        var scope = scopedMovieIds ?? new HashSet<Guid>();
+        var add = group.MovieIds.Except(members).OrderBy(id => id).ToList();
+        // 移除范围只限本次扫描得到的 MetaTube 影片：范围外的手工条目（别的库、别的来源）一律不动，
         // 否则一次同步就能把用户整理好的合集吃干净（设计 4.2-4）。
-        var remove = existing.MemberIds.Intersect(scopedMovieIds).Except(group.MovieIds).OrderBy(id => id).ToList();
+        // 范围内的条目没有这层保护：手工塞进合集、但本次扫描里它不含这位演员的影片，照样被移除。
+        var remove = members.Intersect(scope).Except(group.MovieIds).OrderBy(id => id).ToList();
         var needsProviderId = string.IsNullOrEmpty(existing.ActorId) && !string.IsNullOrEmpty(group.ActorId);
+        // 按 pid 命中时两边 pid 必然相同，所以「两边都有 pid 且不同」只可能是同名命中：
+        // 撞名的两位演员仍复用这个同名合集、仍不改名，但要把冲突交给写入方记 Warn（设计 4.5）。
+        var nameConflict = !string.IsNullOrEmpty(existing.ActorId) && !string.IsNullOrEmpty(group.ActorId) &&
+                           !SamePid(group.Provider, group.ActorId, existing.Provider, existing.ActorId);
 
         return new SyncPlan
         {
@@ -206,7 +244,18 @@ public static class ActorCollectionSync
             CollectionId = existing.Id,
             AddItemIds = add,
             RemoveItemIds = remove,
-            NeedsProviderId = needsProviderId
+            NeedsProviderId = needsProviderId,
+            NameConflict = nameConflict
         };
+    }
+
+    /// <summary>
+    /// 两个 pid 是否指向同一位演员：provider 段大小写不敏感（与 Jellyfin 的 ProviderIds 字典同口径），
+    /// id 段按序数——判据与 Index 的两级索引一致。
+    /// </summary>
+    private static bool SamePid(string providerA, string idA, string providerB, string idB)
+    {
+        return string.Equals(providerA ?? string.Empty, providerB ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+               && string.Equals(idA ?? string.Empty, idB ?? string.Empty, StringComparison.Ordinal);
     }
 }

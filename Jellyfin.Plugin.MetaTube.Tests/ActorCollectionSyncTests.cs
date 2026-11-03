@@ -5,7 +5,7 @@ namespace Jellyfin.Plugin.MetaTube.Tests;
 
 /// <summary>
 /// 演员合集的离线防线：分组、匹配与差集。服务端调用只能实机验（见 B8），
-/// 这 15 条必须在没有 Jellyfin 进程的环境下就把逻辑卡死。
+/// 这 20 条必须在没有 Jellyfin 进程的环境下就把逻辑卡死。
 /// </summary>
 public class ActorCollectionSyncTests
 {
@@ -134,6 +134,21 @@ public class ActorCollectionSyncTests
     }
 
     [Fact]
+    // 演员 id 只差大小写是两个不同的人，按 pid 查必须区分开，否则两人被并成一个合集；
+    // provider 段仍大小写不敏感（与 Jellyfin 取 provider id 的口径一致）。
+    public void Index_FindsCaseVaryingActorIdsSeparately()
+    {
+        var lower = Existing(D, "合集甲", "JavBus", "j-9", A);
+        var upper = Existing(C, "合集乙", "JavBus", "J-9", B);
+        var index = new ActorCollectionSync.Index(new[] { lower, upper });
+
+        Assert.Same(lower, index.Find(Group("合集甲", "JavBus", "j-9")));
+        Assert.Same(upper, index.Find(Group("合集乙", "JavBus", "J-9")));
+        // 第三个断言证明 pid 命中先于同名命中：名字要的是「合集乙」，provider 换写法后仍指向 lower。
+        Assert.Same(lower, index.Find(Group("合集乙", "javbus", "j-9")));
+    }
+
+    [Fact]
     // 设计 D3 + D12：阈值只门控创建。
     public void Plan_SkipsCreationBelowThreshold()
     {
@@ -216,5 +231,67 @@ public class ActorCollectionSyncTests
 
         Assert.True(plan.NeedsProviderId);
         Assert.Equal(ActorCollectionSync.SyncAction.Update, plan.Action);
+    }
+
+    [Fact]
+    // 两位演员撞同一个舞台名是这里的常态：同名命中但两边 pid 不同，必须让写入方看得见（设计 4.5 记 Warn）。
+    public void Plan_ReportsNameConflictWhenNameHitHasDifferentPid()
+    {
+        var other = Existing(D, "有栖", "Gfriends", "g-1", A, B);
+        var group = Group("有栖", "JavBus", "j-9", A, C);
+        var existing = new ActorCollectionSync.Index(new[] { other }).Find(group, out var byPid);
+
+        Assert.False(byPid);
+        Assert.Same(other, existing);
+
+        var plan = ActorCollectionSync.Plan(group, existing, new[] { A, B, C }, 3);
+
+        Assert.NotEqual(ActorCollectionSync.SyncAction.Create, plan.Action);
+        Assert.True(plan.NameConflict);
+        Assert.False(plan.NeedsProviderId);
+        Assert.NotNull(plan.CollectionId);
+        Assert.Equal(D, plan.CollectionId.Value);
+    }
+
+    [Fact]
+    // 合集那边没 pid 时不算撞名：这是设计 4.2 第 99 行的「复用并补写 pid」。
+    public void Plan_NameHitWithoutPidOnExistingSideIsNotAConflict()
+    {
+        var manual = Existing(D, "有栖", memberIds: A);
+        var group = Group("有栖", "Gfriends", "g-1", A, B);
+        var existing = new ActorCollectionSync.Index(new[] { manual }).Find(group, out var byPid);
+
+        Assert.False(byPid);
+
+        var plan = ActorCollectionSync.Plan(group, existing, new[] { A, B }, 3);
+
+        Assert.False(plan.NameConflict);
+        Assert.True(plan.NeedsProviderId);
+    }
+
+    [Fact]
+    // 「手工条目不动」只保护扫描范围外的条目：范围内的影片本次不含这位演员，就正常移除。
+    public void Plan_RemovesInScopeHandAddedMember()
+    {
+        var existing = Existing(D, "有栖", "Gfriends", "g-1", A, B);
+        var plan = ActorCollectionSync.Plan(Group("有栖", "Gfriends", "g-1", A), existing, new[] { A, B, C }, 3);
+
+        Assert.Empty(plan.AddItemIds);
+        Assert.Equal(new[] { B }, plan.RemoveItemIds);
+    }
+
+    [Fact]
+    // 服务端给回 null（LinkedChildren 实际可空，仓库又没开可空注解）不能把纯计算崩掉：
+    // 空成员集按「全要加」算，空范围按「什么都不移除」算。
+    public void Plan_ToleratesNullMemberSetAndNullScanScope()
+    {
+        var noMembers = Existing(D, "有栖", "Gfriends", "g-1");
+        noMembers.MemberIds = null;
+        var plan = ActorCollectionSync.Plan(Group("有栖", "Gfriends", "g-1", A, B), noMembers, null, 3);
+
+        Assert.Equal(ActorCollectionSync.SyncAction.Update, plan.Action);
+        Assert.Equal(new[] { A, B }, plan.AddItemIds.OrderBy(x => x));
+        Assert.Empty(plan.RemoveItemIds);
+        Assert.False(plan.NameConflict);
     }
 }
