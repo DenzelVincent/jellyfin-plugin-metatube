@@ -45,6 +45,20 @@ public class PluginConfiguration : BasePluginConfiguration
 #endif
     public bool EnableCollections { get; set; } = false;
 
+#if !__EMBY__
+    /// <summary>
+    /// 演员合集开关。合集由「同步演员合集」计划任务维护，不在刮削链路里写，
+    /// 关掉开关只停任务，已生成的合集不会被删除（设计 4.3）。
+    /// </summary>
+    public bool EnableActorCollections { get; set; } = false;
+
+    /// <summary>
+    /// 最小片数阈值，默认 3，设为 1 即每位演员都建。
+    /// 只门控「新建」：跌破阈值不回收已有合集，已存在的合集继续对齐成员（设计 D12）。
+    /// </summary>
+    public int ActorCollectionMinMovieCount { get; set; } = 3;
+#endif
+
 #if __EMBY__
     [DisplayName("启用导演信息")]
     [Description("为对应影片的元数据添加导演信息。")]
