@@ -110,20 +110,24 @@ def get_releases() -> list:
     return result
 
 
-def load_manifest() -> list:
-    """Published manifest, or the built-in skeleton when it is unreachable.
+def load_manifest() -> tuple[list, bool]:
+    """Published manifest and whether the built-in skeleton had to stand in.
+
+    Returns ``(manifest, used_skeleton)``: the flag says the seed was
+    unreachable, so ``versions`` starts out empty.
 
     A fork's first publish has no dist branch yet, and a network hiccup must
     not abort a release that already built successfully.
     """
     try:
         with urlopen(MANIFEST_URL.format(repository=REPOSITORY), timeout=30) as f:
-            return json.load(f)
+            return json.load(f), False
     except (URLError, OSError, ValueError) as e:
         # HTTPError 是 URLError 的子类；JSON 解析失败走 ValueError。
-        print(f'warning: published manifest unavailable, using skeleton: {e}',
-              file=sys.stderr)
-        return copy.deepcopy(SKELETON)
+        print(f'warning: published manifest unavailable, using skeleton: {e}; '
+              'a 404 normally means the dist branch does not exist yet, i.e. '
+              'this fork is publishing for the first time', file=sys.stderr)
+        return copy.deepcopy(SKELETON), True
 
 
 def main() -> None:
@@ -135,7 +139,7 @@ def main() -> None:
     csproj = os.path.join(os.path.dirname(__file__),
                           "../Jellyfin.Plugin.MetaTube/Jellyfin.Plugin.MetaTube.csproj")
 
-    manifest = load_manifest()
+    manifest, used_skeleton = load_manifest()
 
     plugin = manifest[0]
     plugin['imageUrl'] = IMAGE_URL.format(repository=REPOSITORY)
@@ -144,6 +148,14 @@ def main() -> None:
     try:
         releases = get_releases()
     except (URLError, OSError, ValueError) as e:
+        # 两处兜底叠在一起就会产出错的目录：种子读不到时 plugin['versions'] 为空，
+        # releases API 又失败，写出的 manifest 只剩本次构建，CI 强推 dist 分支后
+        # 已发布的历史会被抹光。宁肯这次发布失败，也不发出没有历史的 manifest。
+        if used_skeleton:
+            print(f'error: no published manifest to keep and releases cannot be '
+                  f'listed, so the catalog would lose every previously published '
+                  f'version: {e}', file=sys.stderr)
+            sys.exit(1)
         # Do not break the release when the API is unavailable: keep the
         # previous entries, only the new one gets the corrected URL.
         print(f'warning: cannot list releases: {e}', file=sys.stderr)
