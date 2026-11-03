@@ -47,7 +47,7 @@
                             <input id="chkEnableActorCollections" is="emby-checkbox" name="chkEnableActorCollections" type="checkbox"/>
                             <span>Enable actor collections</span>
                         </label>
-                        <div class="fieldDescription checkboxFieldDescription">Create one collection per actor from MetaTube metadata. Maintained by the "Sync actor collections" scheduled task (Jellyfin only).</div>
+                        <div class="fieldDescription checkboxFieldDescription">Create one collection per actor from MetaTube metadata. Maintained by the "同步演员合集" scheduled task (Jellyfin only).</div>
                     </div>
 
                     <div class="inputContainer">
@@ -463,7 +463,7 @@
                 config.EnableCollections = $('#chkEnableCollections', form).prop('checked');
                 config.EnableActorCollections = $('#chkEnableActorCollections', form).prop('checked');
                 var actorMin = parseInt($('#txtActorCollectionMinMovieCount', form).val(), 10);
-                config.ActorCollectionMinMovieCount = isNaN(actorMin) || actorMin < 1 ? 3 : actorMin;
+                config.ActorCollectionMinMovieCount = isNaN(actorMin) ? 3 : Math.max(1, actorMin);
                 config.EnableDirectors = $('#chkEnableDirectors', form).prop('checked');
                 config.EnableRatings = $('#chkEnableRatings', form).prop('checked');
                 config.EnableTrailers = $('#chkEnableTrailers', form).prop('checked');
@@ -530,7 +530,7 @@
                 "Enable collections": "启用合集",
                 "Automatically create collections by series.": "按系列自动创建合集。",
                 "Enable actor collections": "启用演员合集",
-                "Create one collection per actor from MetaTube metadata. Maintained by the \"Sync actor collections\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
+                "Create one collection per actor from MetaTube metadata. Maintained by the \"同步演员合集\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
                 "Actor collection minimum movies:": "演员合集最小影片数：",
                 "Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)": "只门控新建：演员至少要有这么多部影片才会新建合集；已存在的合集即使跌破也继续对齐成员。设为 1 即每位演员都建；留空按默认 3 处理。（默认：3）",
                 "Enable directors": "启用导演信息",
