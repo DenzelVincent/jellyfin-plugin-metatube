@@ -150,6 +150,11 @@ public static class TranslationHelper
     private static async Task LogResolvedModelAsync(CancellationToken cancellationToken, Action<string> log)
     {
         var config = Configuration;
+        // 只有真的会用到 OpenAI（选它，或免费端点失败时回落到它）才值得探测：
+        // 探测是带 10 秒超时的真实请求，端点不可达时每张影片都可能白等一趟。
+        if (config.TranslationEngine != TranslationEngine.OpenAi && !CanFallbackToAi())
+            return;
+
         if (string.IsNullOrWhiteSpace(config.OpenAiApiUrl) || !string.IsNullOrWhiteSpace(config.OpenAiModel))
             return;
 
