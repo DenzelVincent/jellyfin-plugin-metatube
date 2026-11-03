@@ -300,6 +300,21 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnableSeriesTranslation" is="emby-checkbox" name="chkEnableSeriesTranslation" type="checkbox"/>
+                            <span>Translate series names</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.</div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtRawSeriesTranslationTable">Series translation table:</label>
+                        <textarea class="emby-input" id="txtRawSeriesTranslationTable" is="emby-input" name="txtRawSeriesTranslationTable" rows="5"></textarea>
+                        <div class="fieldDescription">One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.</div>
+                    </div>
+
                 </div>
 
                 <div class="verticalSection">
@@ -435,6 +450,8 @@
                 $('#txtTaglineTemplate', page).val(config.TaglineTemplate).change();
                 $('#selectTranslationMode', page).val(config.TranslationMode).change();
                 $('#selectTranslationEngine', page).val(config.TranslationEngine).change();
+                page.querySelector('#chkEnableSeriesTranslation').checked = config.EnableSeriesTranslation;
+                $('#txtRawSeriesTranslationTable', page).val(config.RawSeriesTranslationTable).change();
                 $('#txtBaiduAppId', page).val(config.BaiduAppId).change();
                 $('#txtBaiduAppKey', page).val(config.BaiduAppKey).change();
                 $('#txtGoogleApiKey', page).val(config.GoogleApiKey).change();
@@ -487,6 +504,8 @@
                 config.TaglineTemplate = $('#txtTaglineTemplate', form).val();
                 config.TranslationMode = $('#selectTranslationMode', form).val();
                 config.TranslationEngine = $('#selectTranslationEngine', form).val();
+                config.EnableSeriesTranslation = $('#chkEnableSeriesTranslation', form).prop('checked');
+                config.RawSeriesTranslationTable = $('#txtRawSeriesTranslationTable', form).val();
                 config.BaiduAppId = $('#txtBaiduAppId', form).val();
                 config.BaiduAppKey = $('#txtBaiduAppKey', form).val();
                 config.GoogleApiKey = $('#txtGoogleApiKey', form).val();
@@ -603,6 +622,10 @@
                 "Custom OpenAI-compatible api url. (optional)": "兼容 OpenAI 的自定义 API 地址。（可选）",
                 "OpenAI model:": "OpenAI 模型：",
                 "Custom OpenAI-compatible api model. (optional)": "兼容 OpenAI 的自定义 API 模型。（可选）",
+                "Translate series names": "翻译系列名",
+                "Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.": "翻译系列名；合集名、系列标签与 {series} 模板变量都会跟着变成译文。",
+                "Series translation table:": "系列译文对照表：",
+                "One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.": "每行一条记录，用等号分隔，例如 系列原名=译文；等号右侧留空表示保留原文。表内命中就不再调用翻译引擎。",
                 "Substitution": "替换",
                 "Enable title substitution": "启用标题替换",
                 "Title substitution table:": "标题替换表：",
