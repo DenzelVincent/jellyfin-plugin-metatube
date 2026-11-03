@@ -3,6 +3,7 @@ using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.MetaTube.Extensions;
 using Jellyfin.Plugin.MetaTube.Helpers;
 using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
