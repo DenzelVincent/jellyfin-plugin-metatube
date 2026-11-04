@@ -107,6 +107,7 @@ Welcome and feel free to ask any questions at [Discussions](https://github.com/m
 JavBus / JAV321 等 DMM 系源的 `cover_url` 实际是 `pics.dmm.co.jp` 的 800×538 转存图，同一作品在 `awsimgsrc.dmm.co.jp` 上有 2184×1468 的版本。打开「Use DMM HD covers」后，插件把封面地址改写成高清版再交给服务端取图：Jellyfin 按 2:3 裁切后仍有约 978×1468，而不是 358×538。
 
 - 默认关闭；只改写文件名恰为 `<cid>pl.jpg` 的 DMM 封面，剧照、缩略图与非 DMM 图床一律不动，取不到作品编号时保持原图。
+- **打开开关后已有封面不会自动重下**：本地 `poster.jpg` 是按旧地址落盘的，需要对这些条目「刷新图片」（或删掉媒体目录里的 poster）才会重新取高清版。这是有意的——切换开关不触发整库重抓。
 - 这是上游 [issue #653](https://github.com/metatube-community/jellyfin-plugin-metatube/issues/653) 的插件侧前置实现；服务端提供同名开关后应改回服务端配置。
 
 ### 翻译链路改造
