@@ -98,7 +98,7 @@ public class ActorCollectionSyncTests
         var group = Assert.Single(ActorCollectionSync.Build(new[]
         {
             Ref(A, "Yui Hatsumi"), Ref(B, " yui hatsumi "), Ref(C, "Yui Hatsumi")
-        }));
+        }).Values);
 
         Assert.Equal("yui hatsumi", group.Key);
         Assert.Equal("Yui Hatsumi", group.DisplayName);
