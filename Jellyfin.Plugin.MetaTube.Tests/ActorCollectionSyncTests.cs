@@ -383,4 +383,55 @@ public class ActorCollectionSyncTests
     {
         Assert.Equal(ActorCollectionSync.CoverAction.FetchGalleryImage, ActorCollectionSync.PlanCover(false, false));
     }
+
+    [Fact]
+    // 两边都有 pid 时按 pid 认人：用户改过合集名也要能匹配到这位演员。
+    public void MatchesActor_UsesProviderIdWhenBothSidesHaveOne()
+    {
+        var group = Group("三上悠亜", "javbus", "a-1", A);
+        Assert.True(ActorCollectionSync.MatchesActor(group, Existing(D, "我改过的名字", "javbus", "a-1", A)));
+    }
+
+    [Fact]
+    // 本轮还没解析到 pid（group 为空）时退回按名字比，忽略大小写与首尾空格。
+    public void MatchesActor_FallsBackToNameWhenGroupHasNoPid()
+    {
+        var group = Group(" 三上悠亜 ", "", "", A);
+        Assert.True(ActorCollectionSync.MatchesActor(group, Existing(D, "三上悠亜", "javbus", "a-1", A)));
+    }
+
+    [Fact]
+    public void MatchesActor_RejectsDifferentActor()
+    {
+        var group = Group("三上悠亜", "javbus", "a-1", A);
+        Assert.False(ActorCollectionSync.MatchesActor(group, Existing(D, "别的名字", "javbus", "a-2", A)));
+    }
+
+    [Fact]
+    // 影片被删光（无存活成员）且本轮演职表里没有这位演员：带 pid 的合集才清理。
+    public void ShouldRemoveEmptyCollection_OnlyWhenOursIsEmptyAndActorGone()
+    {
+        Assert.True(ActorCollectionSync.ShouldRemoveEmptyCollection(true, false, false));
+    }
+
+    [Fact]
+    // 演员还在（刚建好、成员还没加完的那一次）不能删，留给下一轮。
+    public void ShouldRemoveEmptyCollection_KeepsCollectionWhileActorStillHasMovies()
+    {
+        Assert.False(ActorCollectionSync.ShouldRemoveEmptyCollection(true, false, true));
+    }
+
+    [Fact]
+    // 还有存活成员就绝不是空合集。
+    public void ShouldRemoveEmptyCollection_KeepsCollectionWithLivingMembers()
+    {
+        Assert.False(ActorCollectionSync.ShouldRemoveEmptyCollection(true, true, false));
+    }
+
+    [Fact]
+    // 用户手建的合集没有 pid，即便为空也永远不动。
+    public void ShouldRemoveEmptyCollection_NeverRemovesUserMadeCollection()
+    {
+        Assert.False(ActorCollectionSync.ShouldRemoveEmptyCollection(false, false, false));
+    }
 }

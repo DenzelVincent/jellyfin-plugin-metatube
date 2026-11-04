@@ -195,6 +195,32 @@ public static class ActorCollectionSync
     }
 
     /// <summary>
+    /// 这个合集是不是这位演员的：两边都有 pid 时按 pid 比（用户改过合集名也认得出），
+    /// 本轮还没解析到 pid 时退回按合集名比。
+    /// </summary>
+    public static bool MatchesActor(ActorGroup group, ExistingCollection existing)
+    {
+        if (group is null || existing is null)
+            return false;
+
+        if (!string.IsNullOrEmpty(group.ActorId) && !string.IsNullOrEmpty(existing.ActorId))
+            return SamePid(group.Provider, group.ActorId, existing.Provider, existing.ActorId);
+
+        return string.Equals(GroupKey(group.DisplayName), GroupKey(existing.Name), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 空合集该不该删。三个条件同时成立才删：
+    /// ① 带 MetaTube pid——我们建过或接管过，用户手建的合集没有 pid，永远不动（设计 4.3）；
+    /// ② 一个存活成员都没有——成员 id 还在但影片已从库里删掉时也算空；
+    /// ③ 本轮没有这位演员——演员还在（刚建好、成员还没加完的那一次）就留给下一轮。
+    /// </summary>
+    public static bool ShouldRemoveEmptyCollection(bool hasProviderId, bool anyMemberAlive, bool actorStillPresent)
+    {
+        return hasProviderId && !anyMemberAlive && !actorStillPresent;
+    }
+
+    /// <summary>
     /// 现有合集索引。10.11 的 ICollectionManager 没有按名查找（设计第 3 节反射实测），
     /// 所以一次查询的结果在这里建两份索引，不能一位演员一查。
     /// </summary>

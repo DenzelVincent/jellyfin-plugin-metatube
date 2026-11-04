@@ -95,7 +95,8 @@ public class SyncActorCollectionsTask : IScheduledTask
 
         var groups = ActorCollectionSync.Build(refs);
         // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
-        var index = new ActorCollectionSync.Index(_libraryManager.ReadCollections(Plugin.ProviderId));
+        var collections = _libraryManager.ReadCollections(Plugin.ProviderId);
+        var index = new ActorCollectionSync.Index(collections);
 
         var created = 0;
         var updated = 0;
@@ -169,6 +170,12 @@ public class SyncActorCollectionsTask : IScheduledTask
                 _logger.Error("Sync actor collection error: {0} ({1})", group.DisplayName, e.Message);
             }
         }
+
+        // 空合集清理：影片被删光后演员从本轮演职表里消失，上面的循环再也碰不到这个合集，空壳会一直留着。
+        // 只删「带 pid + 没有存活成员 + 本轮没有这位演员」的合集，用户手建的（无 pid）永远不动。
+        var removed = RemoveEmptyCollections(collections, groups, cancellationToken);
+        if (removed > 0)
+            _logger.Info("Removed {0} empty actor collection(s)", removed);
 
         // 设计 4.5 要「pid 缺失记 Warn」，但库里演员成千上万，逐个 Warn 会把日志冲干净，所以整轮汇总成两条。
         // personPidHits 为 0 而 searchedPidHits 很高 = 刮削期写的 pid 没跟着落库
@@ -314,6 +321,39 @@ public class SyncActorCollectionsTask : IScheduledTask
     {
         await CollectionCoverSync.AlignAsync(collection, plan.Name, plan.Provider, plan.ActorId, _libraryManager,
             _providerManager, _logger, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 清掉影片已被删光的演员合集（判断口径见 <see cref="ActorCollectionSync.ShouldRemoveEmptyCollection"/>）。
+    /// 删除动作与 Jellyfin 自己「删除合集」一致：条目与合集目录一起删，
+    /// 否则空目录会被下次扫描重新捡回来，变成永远清不掉的空壳。
+    /// </summary>
+    private int RemoveEmptyCollections(IEnumerable<ActorCollectionSync.ExistingCollection> collections,
+        Dictionary<string, ActorCollectionSync.ActorGroup> groups, CancellationToken cancellationToken)
+    {
+        var removed = 0;
+        foreach (var existing in collections)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var hasProviderId = !string.IsNullOrEmpty(existing.Provider) && !string.IsNullOrEmpty(existing.ActorId);
+            // 成员 id 还挂在 LinkedChildren 上、但影片已从库中删除的情况也算空，所以逐个确认条目是否还在。
+            var anyMemberAlive = existing.MemberIds is { Count: > 0 } &&
+                                 existing.MemberIds.Any(id => _libraryManager.GetItemById(id) is not null);
+            var actorStillPresent = groups.Values.Any(group => ActorCollectionSync.MatchesActor(group, existing));
+
+            if (!ActorCollectionSync.ShouldRemoveEmptyCollection(hasProviderId, anyMemberAlive, actorStillPresent))
+                continue;
+
+            if (_libraryManager.GetItemById(existing.Id) is not BaseItem item)
+                continue;
+
+            _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true });
+            _logger.Info("Remove empty actor collection: {0} ({1})", existing.Name, existing.Id);
+            removed++;
+        }
+
+        return removed;
     }
 
     /// <summary>
