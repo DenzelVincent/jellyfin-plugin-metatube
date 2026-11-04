@@ -39,7 +39,19 @@ public static class EmptyCollectionCleaner
                 .Select(child => child.ItemId.Value)
                 .ToList();
 
-            if (HasLivingMember(memberIds, id => libraryManager.GetItemById(id) is not null))
+            var living = new HashSet<Guid>();
+            foreach (var id in memberIds)
+            {
+                if (libraryManager.GetItemById(id) is not null)
+                    living.Add(id);
+            }
+
+            // 角标（ChildCount）由服务端按链接 join 存活条目算出：把这三个数打出来，
+            // 才能判断「角标和合集里看到的条目数对不上」是链接问题还是服务端自己的计数口径问题。
+            logger.LogDebug("Collection links: {0} ({1}) links={2} living={3} distinct={4}",
+                box.Name, box.Id, memberIds.Count, living.Count, memberIds.Distinct().Count());
+
+            if (HasLivingMember(memberIds, living.Contains))
                 continue;
 
             if (libraryManager.GetItemById(box.Id) is not BaseItem item)
