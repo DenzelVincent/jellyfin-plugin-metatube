@@ -70,7 +70,7 @@ Welcome and feel free to ask any questions at [Discussions](https://github.com/m
 
 | 项目 | 角色 | 地址 |
 | --- | --- | --- |
-| metatube-sdk-go | 刮削服务端，提供搜索、详情、图片与翻译 REST API | https://github.com/DenzelVincent/metatube-sdk-go |
+| metatube-sdk-go | 刮削服务端，提供搜索、详情、图片与翻译 REST API；勾选「启用字段级聚合」需服务端 ≥ v1.7.0 | 源码 https://github.com/DenzelVincent/metatube-sdk-go <br> 镜像 https://ghcr.io/ming0feng/metatube-server |
 | jellyfin-plugin-metatube | 本插件：Jellyfin / Emby 元数据与图片提供程序 | https://github.com/DenzelVincent/jellyfin-plugin-metatube |
 | emby-subtitlecat | Emby 字幕插件，依赖本插件的刮削结果定位番号并补「中文字幕」角标 | https://github.com/Ming0feng/emby-subtitlecat |
 
