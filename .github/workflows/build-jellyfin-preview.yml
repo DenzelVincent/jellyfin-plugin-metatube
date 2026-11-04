@@ -1,0 +1,44 @@
+name: Jellyfin 预览编译
+
+# 只试编、不发布产物：升 Jellyfin 大版本前先跑一次，把破坏点提前暴露出来。
+# 失败不等于仓库坏了——发布链路仍然按 csproj 里的默认版本走。
+on:
+  workflow_dispatch:
+    inputs:
+      sdk_version:
+        description: '要试编的 Jellyfin SDK 版本'
+        required: true
+        default: '12.4.0'
+        type: string
+      target_framework:
+        description: '与之配对的目标框架（12.x 只支持 net10.0）'
+        required: true
+        default: 'net10.0'
+        type: string
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      SDK_VERSION: ${{ github.event.inputs.sdk_version }}
+      TARGET_FRAMEWORK: ${{ github.event.inputs.target_framework }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 6.0.x 是 Emby 目标（net6.0）需要的，删了会连带把 Emby 目标编挂。
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            9.0.x
+            10.0.x
+
+      # 只编插件工程：测试工程硬编码 net9.0（`Jellyfin.Plugin.MetaTube.Tests.csproj:5`），
+      # 裸跑会连它一起编，解决方案级报 NU1201，掩盖真正的破坏点。理由见 E2.4。
+      - name: Build Jellyfin target
+        run: dotnet build Jellyfin.Plugin.MetaTube/Jellyfin.Plugin.MetaTube.csproj --configuration Release -p:JellyfinSdkVersion="$SDK_VERSION" -p:JellyfinTargetFramework="$TARGET_FRAMEWORK"
+
+      # Emby 目标不吃这两个参数，一起编一遍确认没被波及。
+      - name: Build Emby target
+        run: dotnet build --configuration Release.Emby
