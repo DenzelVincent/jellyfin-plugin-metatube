@@ -113,6 +113,39 @@ Welcome and feel free to ask any questions at [Discussions](https://github.com/m
 | 字段级容错 | 标题与简介独立处理，任一字段失败只保留该字段原文，不影响另一个 |
 | 取消语义修复 | 重试逻辑不再吞掉 `OperationCanceledException`，服务关闭时可立即中断 |
 
+### 演员合集
+
+开启「启用演员合集」后，计划任务「同步演员合集」按 MetaTube 元数据里的演员维护合集：每位演员一个合集，一部影片可同时归属多个演员合集。合集由任务维护而不是刮削链路，因此频次就是该任务的定时触发（默认每日 4:00）。
+
+- 「演员合集最小影片数」默认 3，设为 1 即每位演员都建。**只门控新建**：跌破阈值不回收已有合集，已存在的合集继续对齐成员，合集永不被自动删除。
+- 成员增删只在本次扫描得到的 MetaTube 影片范围内进行，你手工加进合集的其它条目一律不动。
+- 合集名取演员显示名原样，因此会跟随「启用真实演员名」与演员替换表的结果；演员改名后旧合集会被对齐到剩余成员，留下的空壳需手工删除。
+- 合集封面取自该演员在 MetaTube 的照片，需服务端能访问该演员的图片。
+- 仅 Jellyfin 提供该能力，Emby 端不出现这两个配置项。
+
+### 系列译文
+
+「翻译系列名」把 `m.Series` 整体翻译，合集名、系列标签与 `{series}` 模板变量三处一起变成译文。译文写进「系列译文对照表」（每行 `原文=译文`），命中即不再调用翻译引擎——合集靠名字匹配，同一系列换译法会在库里裂成两个合集。
+
+- 等号右侧留空表示这个系列保留原文；误译直接在表里改一行，下一张影片即生效。
+- 开启后**已刮过的影片不会自动改名**，需要全库覆盖刷新元数据才生效；旧的日文合集不会被自动删除或合并，需手工清理。
+- 库内建议统一元数据语言：`zh-CN` 与 `zh-TW` 会各译一遍，同一系列可能裂成两个合集；目标语言为 `ja` 时该字段保留原文。
+- Emby 端查表与调引擎都工作，但引擎新译的结果**不会自动写回表**，需要手工维护对照表。
+- 首次全库刷新元数据期间**不要停留在插件设置页**：保存配置会把整份配置按页面打开时读到的值写回去，这段时间里刮削自动新增的对照表行会被旧内容覆盖。等刷新结束再打开页面即可避免。
+
+### 插件存储库与分发指向
+
+本分支的构建产物、Release、catalog 与程序集元数据全部指向 `DenzelVincent/jellyfin-plugin-metatube`，与上游仓库互不干扰；插件标识（GUID、名称、provider id）与上游保持一致，因此**服务端只保留这一个仓库条目**，上游 MetaTube 仓库条目必须删除，否则两边同 GUID 会互相覆盖版本。
+
+仓库地址（控制台 → 插件 → 存储库）：
+
+- 主：`https://raw.githubusercontent.com/DenzelVincent/jellyfin-plugin-metatube/dist/manifest.json`
+- 备选（国内可达性）：`https://cdn.jsdelivr.net/gh/DenzelVincent/jellyfin-plugin-metatube@dist/manifest.json`
+
+已知残留风险：插件 zip 仍从 `github.com/.../releases/download` 取，GitHub 下载不可用时安装会失败，换 catalog 地址解决不了这一步。
+
+升级 Jellyfin 大版本前，先手跑工作流 `Jellyfin 预览编译`（填目标 SDK 版本与配套框架），编不过就先别升服务端。
+
 ## Licence
 
 This plugin is released under the [MIT](https://github.com/DenzelVincent/jellyfin-plugin-metatube/blob/main/LICENSE) License.
