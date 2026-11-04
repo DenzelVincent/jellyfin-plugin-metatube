@@ -355,4 +355,32 @@ public class ActorCollectionSyncTests
         Assert.Empty(plan.RemoveItemIds);
         Assert.False(plan.NameConflict);
     }
+
+    [Fact]
+    // 演员有 Person 主图且合集已经一致：零写盘（R-V4 幂等的纯计算部分）。
+    public void PlanCover_SkipsWhenCollectionAlreadyMatchesPersonImage()
+    {
+        Assert.Equal(ActorCollectionSync.CoverAction.Skip, ActorCollectionSync.PlanCover(true, true));
+    }
+
+    [Fact]
+    // 演员有 Person 主图但合集不一致：以演员的图为准，复制覆盖（用户口径「演员换图合集也要跟着换」）。
+    public void PlanCover_CopiesPersonImageWhenCollectionDiffers()
+    {
+        Assert.Equal(ActorCollectionSync.CoverAction.CopyPersonImage, ActorCollectionSync.PlanCover(true, false));
+    }
+
+    [Fact]
+    // 演员没有 Person 主图、合集已有可用本地封面：不反复下载相册图。
+    public void PlanCover_KeepsExistingCoverWhenPersonHasNoImage()
+    {
+        Assert.Equal(ActorCollectionSync.CoverAction.Skip, ActorCollectionSync.PlanCover(false, true));
+    }
+
+    [Fact]
+    // 演员没有 Person 主图、合集也没有图：才回落到相册第一张，避免合集空白。
+    public void PlanCover_FallsBackToGalleryOnlyWhenCoverMissing()
+    {
+        Assert.Equal(ActorCollectionSync.CoverAction.FetchGalleryImage, ActorCollectionSync.PlanCover(false, false));
+    }
 }

@@ -4,7 +4,9 @@ using Jellyfin.Plugin.MetaTube.Extensions;
 using Jellyfin.Plugin.MetaTube.Helpers;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -18,14 +20,16 @@ public class SyncActorCollectionsTask : IScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
     private readonly ICollectionManager _collectionManager;
+    private readonly IProviderManager _providerManager;
     private readonly ILogger _logger;
 
     public SyncActorCollectionsTask(ILogger<SyncActorCollectionsTask> logger, ILibraryManager libraryManager,
-        ICollectionManager collectionManager)
+        ICollectionManager collectionManager, IProviderManager providerManager)
     {
         _logger = logger;
         _libraryManager = libraryManager;
         _collectionManager = collectionManager;
+        _providerManager = providerManager;
     }
 
     public string Key => $"{Plugin.ProviderName}SyncActorCollections";
@@ -225,6 +229,9 @@ public class SyncActorCollectionsTask : IScheduledTask
             // SkipReason 非空表示被最小片数阈值挡下；为空表示本来就一致，无需写库。
             if (!string.IsNullOrEmpty(plan.SkipReason))
                 _logger.Debug("Skip creating actor collection: {0}", plan.SkipReason);
+
+            // 成员这轮没变，但封面仍要对齐：演员换了 Person 头像也要跟着换（用户口径）。
+            await AlignCoverAsync(plan, cancellationToken).ConfigureAwait(false);
             return ActorCollectionSync.SyncAction.None;
         }
 
@@ -251,6 +258,9 @@ public class SyncActorCollectionsTask : IScheduledTask
             var missing = plan.AddItemIds.Where(id => !children.Any(c => c.ItemId == id)).ToList();
             if (missing.Count > 0)
                 await _collectionManager.AddToCollectionAsync(box.Id, missing).ConfigureAwait(false);
+
+            // 新建的合集立刻对齐一次封面，首次打开就有演员图，不必等下一轮或一次图片刷新。
+            await AlignCoverAsync(box, plan, cancellationToken).ConfigureAwait(false);
 
             return plan.Action;
         }
@@ -280,7 +290,30 @@ public class SyncActorCollectionsTask : IScheduledTask
             await _libraryManager.EnsureCollectionPidAsync(collectionId, plan.Provider, plan.ActorId, _logger,
                 cancellationToken).ConfigureAwait(false);
 
+        // 成员与 pid 都写完之后再对齐封面：封面用的是演员 Person 条目，不依赖合集上的 pid，
+        // 但放在后面可以让「新建/改成员」的那一次刷新与换图错开。
+        await AlignCoverAsync(plan, cancellationToken).ConfigureAwait(false);
+
         return plan.Action;
+    }
+
+    /// <summary>按 plan 找回已有合集并对齐封面；没有合集（如被阈值挡下）时什么都不做。</summary>
+    private async Task AlignCoverAsync(ActorCollectionSync.SyncPlan plan, CancellationToken cancellationToken)
+    {
+        if (plan.CollectionId is not { } collectionId)
+            return;
+
+        if (_libraryManager.GetItemById(collectionId) is not BoxSet collection)
+            return;
+
+        await AlignCoverAsync(collection, plan, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task AlignCoverAsync(BoxSet collection, ActorCollectionSync.SyncPlan plan,
+        CancellationToken cancellationToken)
+    {
+        await CollectionCoverSync.AlignAsync(collection, plan.Name, plan.Provider, plan.ActorId, _libraryManager,
+            _providerManager, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

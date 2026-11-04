@@ -166,6 +166,34 @@ public static class ActorCollectionSync
         }.ToString();
     }
 
+    /// <summary>合集封面这一轮该做什么。</summary>
+    public enum CoverAction
+    {
+        /// <summary>按当前基准已经一致，不写盘。</summary>
+        Skip,
+
+        /// <summary>把演员 Person 条目的本地主图复制成合集封面。</summary>
+        CopyPersonImage,
+
+        /// <summary>演员没有本地主图、合集也缺图：回落到演员相册第一张。</summary>
+        FetchGalleryImage
+    }
+
+    /// <summary>
+    /// 合集封面的取向（设计 R2）：以演员 Person 条目的主图为唯一基准，每轮都对齐，一致才跳过；
+    /// 只有 Person 没有本地主图时才允许回落到相册，而且回落只在合集缺图时补一次，避免每天重复下载。
+    /// 用户口径「演员页面更新图后合集封面也要更新」就落在这里——不做来源台账，也不看合集旧图是谁写的。
+    /// </summary>
+    /// <param name="personImageAvailable">演员 Person 条目上有一张可用的本地主图。</param>
+    /// <param name="coverUpToDate">按当前基准（Person 主图 / 已有可用本地封面）已经无需写入。</param>
+    public static CoverAction PlanCover(bool personImageAvailable, bool coverUpToDate)
+    {
+        if (personImageAvailable)
+            return coverUpToDate ? CoverAction.Skip : CoverAction.CopyPersonImage;
+
+        return coverUpToDate ? CoverAction.Skip : CoverAction.FetchGalleryImage;
+    }
+
     /// <summary>
     /// 现有合集索引。10.11 的 ICollectionManager 没有按名查找（设计第 3 节反射实测），
     /// 所以一次查询的结果在这里建两份索引，不能一位演员一查。

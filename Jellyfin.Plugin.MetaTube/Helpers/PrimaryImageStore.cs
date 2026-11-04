@@ -46,6 +46,14 @@ public static class PrimaryImageStore
     /// </summary>
     public static string GetPosterPath(BaseItem item)
     {
+        // 只认「一个媒体文件」：Path 是目录的条目（12.4 的 BoxSet 就是
+        // <data>/collections/<名> [boxset]）不能按文件推目录，否则会退到父目录，
+        // 让全部合集共用一个 poster.jpg。
+        if (item is Folder)
+        {
+            return null;
+        }
+
         var mediaPath = item.Path;
         if (string.IsNullOrWhiteSpace(mediaPath))
         {

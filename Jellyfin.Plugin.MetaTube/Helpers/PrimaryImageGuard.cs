@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using Jellyfin.Plugin.MetaTube.Extensions;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 #if __EMBY__
-using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Logging;
 #else
@@ -91,6 +91,14 @@ public static class PrimaryImageGuard
     {
         var item = e?.Item;
         if (item is null)
+        {
+            return;
+        }
+
+        // 只守影片。合集（BoxSet）在 12.4 是真实目录（<data>/collections/<名> [boxset]），
+        // 而演员合集上写的就是 MetaTube pid：放行它会用演员 pid 走影片接口取图，
+        // 再把合集指到「所有合集共用」的父目录 poster.jpg 上——封面先对后错就是这么来的。
+        if (item is not Movie)
         {
             return;
         }
