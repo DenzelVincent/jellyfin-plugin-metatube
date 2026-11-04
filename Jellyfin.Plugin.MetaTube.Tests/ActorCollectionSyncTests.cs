@@ -14,10 +14,10 @@ public class ActorCollectionSyncTests
     private static readonly Guid C = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid D = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
-    private static ActorCollectionSync.ActorRef Ref(Guid movieId, string name, string provider = "",
-        string actorId = "")
+    /// <summary>一条「某影片里的某演员」：只有演职名，pid 由调用方按演员另行解析。</summary>
+    private static ActorCollectionSync.ActorRef Ref(Guid movieId, string name)
     {
-        return new(movieId, name, provider, actorId);
+        return new(movieId, name);
     }
 
     private static ActorCollectionSync.ActorGroup Group(string displayName, string provider, string actorId,
@@ -72,18 +72,37 @@ public class ActorCollectionSyncTests
     }
 
     [Fact]
-    // 这就是把键从 pid 改成显示名的原因（设计 4.2-3）：MovieProvider 只在演员有照片时才 SetPid。
-    public void Build_KeepsOneGroupWhenSomeMoviesHavePidAndOthersNot()
+    // 分组键仍是显示名而不是 pid（设计 4.2-3 的理由没变）；但 pid 不再从演职员行取——
+    // 服务端读演职表时只映射 Id/Name/Role/SortOrder/Type，PersonInfo.ProviderIds 恒为空
+    // （v12.4 PeopleRepository.Map:371-379 / v10.11 :150-158），一律交给演员 pid 解析器。
+    public void Build_GroupsByDisplayNameAndLeavesPidEmpty()
     {
         var groups = ActorCollectionSync.Build(new[]
         {
-            Ref(A, "有栖"), Ref(B, "有栖", "Gfriends", "g-1"), Ref(C, "有栖", "JavBus", "j-9")
+            Ref(A, "有栖"), Ref(B, "有栖"), Ref(C, "有栖")
         });
 
         var group = Assert.Single(groups.Values);
         Assert.Equal(3, group.MovieIds.Count);
-        Assert.Equal("Gfriends", group.Provider);
-        Assert.Equal("g-1", group.ActorId);
+        Assert.Empty(group.Provider);
+        Assert.Empty(group.ActorId);
+    }
+
+    [Fact]
+    // CreditNames 保留库里登记的原始演职名，一个都不许 Trim 或降大小写：
+    // 服务端「按演员取影片」走的是演职表名字的二进制精确匹配（SQLite 默认 BINARY 排序，
+    // v10.11 BaseItemRepository.cs:1891 / v12.4 BaseItemRepository.TranslateQuery.cs:461），
+    // 名字被规范化过就一条都查不到，成员数会退回「只看本次扫描」的旧错误口径。
+    public void Build_KeepsEveryRawCreditNameUnderOneNormalizedKey()
+    {
+        var group = Assert.Single(ActorCollectionSync.Build(new[]
+        {
+            Ref(A, "Yui Hatsumi"), Ref(B, " yui hatsumi "), Ref(C, "Yui Hatsumi")
+        }));
+
+        Assert.Equal("yui hatsumi", group.Key);
+        Assert.Equal("Yui Hatsumi", group.DisplayName);
+        Assert.Equal(new[] { "Yui Hatsumi", " yui hatsumi " }, group.CreditNames);
     }
 
     [Fact]
@@ -267,6 +286,48 @@ public class ActorCollectionSyncTests
 
         Assert.False(plan.NameConflict);
         Assert.True(plan.NeedsProviderId);
+    }
+
+    // 现搜演员是整轮里最贵的一步（服务端要跨源搜索），只在本轮真的可能往合集上写 pid 时才做。
+    // 判错的代价不对称：漏判会让合集永久没封面，所以只有「本轮必然不写 pid」才允许返回 false。
+
+    [Fact]
+    public void ShouldSearchActorPid_FalseWhenGroupAlreadyHasPid()
+    {
+        var group = Group("有栖", "fanza", "x", A);
+        Assert.False(ActorCollectionSync.ShouldSearchActorPid(group, null, 1));
+    }
+
+    [Fact]
+    // 够阈值且还没有合集 → 马上要建合集，pid 得一次写好，否则建出来就是个没封面的空壳（Bug B 的成因）。
+    public void ShouldSearchActorPid_TrueWhenAboutToCreate()
+    {
+        var group = Group("有栖", "", "", A, B, C);
+        Assert.True(ActorCollectionSync.ShouldSearchActorPid(group, null, 3));
+    }
+
+    [Fact]
+    // 不够阈值又还没有合集：这轮不会建，省下这次搜索。
+    public void ShouldSearchActorPid_FalseWhenCreationWouldBeGated()
+    {
+        var group = Group("有栖", "", "", A, B);
+        Assert.False(ActorCollectionSync.ShouldSearchActorPid(group, null, 3));
+    }
+
+    [Fact]
+    // 同名复用来的用户手建合集没有 pid，补上它封面才解析得到，所以要搜。
+    public void ShouldSearchActorPid_TrueWhenExistingCollectionLacksPid()
+    {
+        var group = Group("有栖", "", "", A);
+        Assert.True(ActorCollectionSync.ShouldSearchActorPid(group, Existing(D, "有栖", memberIds: A), 3));
+    }
+
+    [Fact]
+    // 合集上已经有 pid 就不再搜：稳态每轮都要跑到这条，否则每日任务会重复几千次在线搜索。
+    public void ShouldSearchActorPid_FalseWhenExistingCollectionHasPid()
+    {
+        var group = Group("有栖", "", "", A);
+        Assert.False(ActorCollectionSync.ShouldSearchActorPid(group, Existing(D, "有栖", "fanza", "x", A), 3));
     }
 
     [Fact]

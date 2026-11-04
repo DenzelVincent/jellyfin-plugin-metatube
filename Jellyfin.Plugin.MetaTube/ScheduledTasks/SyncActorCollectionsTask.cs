@@ -78,33 +78,16 @@ public class SyncActorCollectionsTask : IScheduledTask
         var scopedIds = new HashSet<Guid>(movies.Select(m => m.Id));
 
         var refs = new List<ActorCollectionSync.ActorRef>();
-        var pidHits = 0;
         foreach (var (idx, movie) in movies.WithIndex())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report((double) idx / Math.Max(movies.Count, 1) * 30);
+            progress?.Report((double) idx / Math.Max(movies.Count, 1) * 15);
 
-            foreach (var actor in _libraryManager.GetActors(movie))
-            {
-                var pid = actor.GetPid(Plugin.ProviderId);
-                if (!string.IsNullOrEmpty(pid.Provider) && !string.IsNullOrEmpty(pid.Id))
-                    pidHits++;
-
-                refs.Add(new ActorCollectionSync.ActorRef(movie.Id, actor.Name, pid.Provider, pid.Id));
-            }
+            // 本次扫描只用来回答「库里出现了哪些演员」。演职行不带演员 pid（服务端只回读
+            // Id/Name/Role/SortOrder/Type），成员和 pid 都另按演员查，见下面按演员的循环。
+            refs.AddRange(_libraryManager.GetActors(movie)
+                .Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
-
-        // V5 观察点：服务端回读 PersonInfo 到底带不带 MetaTube pid。全 0 说明 pid 没能跟着演员元数据落库，
-        // 合集封面就解析不到。退路按设计第 3 节「演员回读路径」那一行：先用反射实测过的
-        // ILibraryManager.GetPerson(name) 兜一次（Person 实体上可能带 pid），仍拿不到再退回
-        // MovieProvider.SetActorImageUrl 的做法——用 ApiClient.SearchActorAsync(显示名) 现搜。
-        _logger.Debug("Actor pid hits: {0} of {1} actor references", pidHits, refs.Count);
-
-        // 设计 4.5 要「pid 缺失记 Warn」，但库里演员成千上万，逐个 Warn 会把日志冲干净，
-        // 所以整轮只发一条：全 0 就是 V5 的最坏情况——服务端回读没带上 pid，封面解析不了。
-        if (refs.Count > 0 && pidHits == 0)
-            _logger.Warn("No MetaTube pid found on {0} actor references, so actor covers cannot resolve " +
-                         "(design V5 fallback applies)", refs.Count);
 
         var groups = ActorCollectionSync.Build(refs);
         // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
@@ -113,15 +96,57 @@ public class SyncActorCollectionsTask : IScheduledTask
         var created = 0;
         var updated = 0;
         var skipped = 0;
+        var personPidHits = 0;
+        var searchedPidHits = 0;
         foreach (var (idx, group) in groups.Values.WithIndex())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(30 + (double) idx / Math.Max(groups.Count, 1) * 70);
+            progress?.Report(15 + (double) idx / Math.Max(groups.Count, 1) * 80);
 
             try
             {
-                var plan = ActorCollectionSync.Plan(group, index.Find(group), scopedIds, minMovieCount);
-                switch (await ApplyAsync(plan, cancellationToken).ConfigureAwait(false))
+                // 成员按演职表取全量：本次扫描只覆盖带 MetaTube pid 的影片，按它算成员会漏片
+                // （演员页能看到 4 部、合集里只有 1 部即由此而来）。一条都没查到时保持本次扫描的结果，
+                // 那是演职名写法与库里登记不一致时唯一的依据；移除范围仍限在 scopedIds 内，不会清空合集。
+                var credited = _libraryManager.GetActorMovieIds(group.CreditNames);
+                if (credited.Count > 0)
+                    group.MovieIds.UnionWith(credited);
+
+                // 演员 pid 第一级：读 Person 实体，一次本地查询，不花钱。
+                var pid = _libraryManager.ReadActorPid(group.DisplayName);
+                var hasPid = !string.IsNullOrEmpty(pid.Provider) && !string.IsNullOrEmpty(pid.Id);
+                if (hasPid)
+                {
+                    group.Provider = pid.Provider;
+                    group.ActorId = pid.Id;
+                    personPidHits++;
+                }
+
+                var existing = index.Find(group);
+
+                // 第二级只在「本轮真的可能往合集上写 pid」时才花一次跨源搜索，判据见 ShouldSearchActorPid。
+                if (!hasPid && ActorCollectionSync.ShouldSearchActorPid(group, existing, minMovieCount))
+                {
+                    pid = await SearchActorPidAsync(group.DisplayName, cancellationToken).ConfigureAwait(false);
+                    if (!string.IsNullOrEmpty(pid.Provider) && !string.IsNullOrEmpty(pid.Id))
+                    {
+                        group.Provider = pid.Provider;
+                        group.ActorId = pid.Id;
+                        searchedPidHits++;
+
+                        // 搜到的 pid 要写回 Person 实体，否则下一轮同一位演员还得再搜一次；
+                        // 合集上那一份是跟着 plan 写的，两处都落才算根本解决。
+                        await _libraryManager.WriteActorPidAsync(group.DisplayName, pid.Provider, pid.Id, _logger,
+                            cancellationToken).ConfigureAwait(false);
+
+                        // 有了 pid 要重新匹配一次：用户改过名的合集只有按 pid 才认得出来，
+                        // 按同名匹配会再建一个重复合集（设计 4.2-4）。
+                        existing = index.Find(group);
+                    }
+                }
+
+                switch (await ApplyAsync(ActorCollectionSync.Plan(group, existing, scopedIds, minMovieCount),
+                            cancellationToken).ConfigureAwait(false))
                 {
                     case ActorCollectionSync.SyncAction.Create:
                         created++;
@@ -141,10 +166,49 @@ public class SyncActorCollectionsTask : IScheduledTask
             }
         }
 
+        // 设计 4.5 要「pid 缺失记 Warn」，但库里演员成千上万，逐个 Warn 会把日志冲干净，所以整轮汇总成两条。
+        // personPidHits 为 0 而 searchedPidHits 很高 = 刮削期写的 pid 没跟着落库
+        // （库里这批影片不是本插件刮的，或 Person 条目被 People 校验的清理环节删过），
+        // 表现是这一轮几乎每位演员都要走一次在线搜索，任务明显变慢。
+        _logger.Debug("Actor pids resolved: {0} from person items, {1} by online search, of {2} groups",
+            personPidHits, searchedPidHits, groups.Count);
+        if (groups.Count > 0 && personPidHits == 0)
+            _logger.Warn("No MetaTube pid found on any Person item in this library; actor collection covers " +
+                         "depend on online searches this run. Refresh the movies with {0} once to persist " +
+                         "actor pids", Plugin.ProviderName);
+
         _logger.Info("Actor collections synced: {0} created, {1} updated, {2} unchanged or gated",
             created, updated, skipped);
 
         progress?.Report(100);
+    }
+
+    /// <summary>
+    /// 演员 pid 第二级：按显示名现搜。服务端要跨源查，是整轮里最贵的一步，
+    /// 所以只在 ShouldSearchActorPid 说本轮用得上时才走到这里。
+    /// 搜不到只当这位演员没有 pid：合集照样建，封面留给用户手动指定，不把整轮打断。
+    /// </summary>
+    private async Task<ProviderId> SearchActorPidAsync(string displayName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var results = await ApiClient.SearchActorAsync(displayName, cancellationToken)
+                .ConfigureAwait(false);
+            var first = results?.FirstOrDefault();
+            return first is null
+                ? ProviderId.Parse(null)
+                : new ProviderId { Provider = first.Provider, Id = first.Id };
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户取消或服务端下发取消时必须原样抛出，不能当成「没搜到」继续建合集。
+            throw;
+        }
+        catch (Exception e)
+        {
+            _logger.Warn("Search actor pid failed: {0} ({1})", displayName, e.Message);
+            return ProviderId.Parse(null);
+        }
     }
 
     private async Task<ActorCollectionSync.SyncAction> ApplyAsync(ActorCollectionSync.SyncPlan plan,

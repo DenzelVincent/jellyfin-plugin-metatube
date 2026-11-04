@@ -317,11 +317,17 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
 
             // Use the first result as the primary actor selection.
             var firstResult = results.First();
+
+            // pid 写在有没有照片之外：服务端 SavePeopleMetadataAsync 会把 PersonInfo.ProviderIds
+            // 抄进 Person 条目入库（v10.11 LibraryManager.cs:3106-3113、v12.4 :3896-3905），
+            // 那是全库里唯一能持久保存演员 pid 的地方。原先只在有照片时才写，没照片的演员
+            // 落不了 pid，演员合集的封面就解析不到（CollectionImageProvider 只认合集上的 pid）。
+            actor.SetPid(Name, firstResult.Provider, firstResult.Id);
+
             if (firstResult.Images?.Any() == true)
             {
                 actor.ImageUrl = ApiClient.GetPrimaryImageApiUrl(
                     firstResult.Provider, firstResult.Id, firstResult.Images.First(), 0.5, true);
-                actor.SetPid(Name, firstResult.Provider, firstResult.Id);
             }
 
             // Use the Gfriends to update the actor profile image, if any.

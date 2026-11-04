@@ -7,12 +7,19 @@ namespace Jellyfin.Plugin.MetaTube.Helpers;
 /// </summary>
 public static class ActorCollectionSync
 {
-    /// <summary>一条「某影片里的某演员」。Provider/ActorId 允许为空串——演员没刮到 pid 是常态。</summary>
-    public readonly record struct ActorRef(Guid MovieId, string Name, string Provider, string ActorId);
+    /// <summary>
+    /// 一条「某影片里的某演员」。这里不带 pid：服务端读演职表时只映射
+    /// Id/Name/Role/SortOrder/Type，PersonInfo.ProviderIds 既不入库也不回读
+    /// （v12.4 PeopleRepository.Map:371-379 / v10.11 :150-158），从演职员行取 pid 恒为空。
+    /// pid 由调用方按演员从 Person 实体解析（见 SyncActorCollectionsTask）。
+    /// </summary>
+    public readonly record struct ActorRef(Guid MovieId, string Name);
 
     /// <summary>一位演员在本次扫描里的期望合集形态。</summary>
     public sealed class ActorGroup
     {
+        private readonly List<string> _creditNames = new();
+
         public ActorGroup(string key, string displayName)
         {
             Key = key;
@@ -25,7 +32,21 @@ public static class ActorCollectionSync
         /// <summary>合集名，原样取演员显示名（设计 4.5：不加前后缀、不做模板）。</summary>
         public string DisplayName { get; }
 
-        /// <summary>组内第一个非空 pid，只当合集封面来源，不参与分组。</summary>
+        /// <summary>
+        /// 库里登记的原始演职名，去重并保持首次出现顺序。
+        /// 查「这位演员参演了哪些影片」必须用它们原样匹配——演职表的名字比较是二进制精确的
+        /// （v10.11 BaseItemRepository.cs:1891 / v12.4 BaseItemRepository.TranslateQuery.cs:461），
+        /// 传 Trim 过或降过大小写的名字会一条都查不到。
+        /// </summary>
+        public IReadOnlyList<string> CreditNames => _creditNames;
+
+        public void AddCreditName(string name)
+        {
+            if (!_creditNames.Contains(name))
+                _creditNames.Add(name);
+        }
+
+        /// <summary>演员的 MetaTube pid，由调用方从 Person 实体解析后填入；只当合集封面来源，不参与分组。</summary>
         public string Provider { get; set; } = string.Empty;
 
         public string ActorId { get; set; } = string.Empty;
@@ -102,18 +123,34 @@ public static class ActorCollectionSync
                 groups[key] = group = new ActorGroup(key, r.Name.Trim());
 
             group.MovieIds.Add(r.MovieId);
-            // 键是显示名而不是 pid：同一演员在库里完全可能一部分影片带 pid、一部分不带
-            // （MovieProvider.SetActorImageUrl 只在演员有照片时才 SetPid），
-            // 按 pid 分组会把这位演员裂成两个合集。
-            if (string.IsNullOrEmpty(group.ActorId) && !string.IsNullOrEmpty(r.Provider) &&
-                !string.IsNullOrEmpty(r.ActorId))
-            {
-                group.Provider = r.Provider;
-                group.ActorId = r.ActorId;
-            }
+            // 原始写法要留给「按演员取影片」的演职表查询做精确匹配，不能被 Trim 掉。
+            group.AddCreditName(r.Name);
+            // 分组键是显示名而不是 pid（设计 4.2-3）：同一位演员的演职名大小写/空格写法不一致时
+            // 不能裂成两个合集。pid 不在这里取——演职员行永远给回空，改由调用方按演员解析。
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// 本轮是否值得为这位演员花一次在线搜索去取 pid。
+    /// 只有「本轮必然不会往合集上写 pid」才允许返回 false：漏判的代价是合集永久没有封面（Bug B 的成因），
+    /// 误判的代价只是多一次搜索。稳态（合集上已有 pid）必须命中 false 分支，
+    /// 否则每日任务会对几千位演员重复跨源搜索。
+    /// </summary>
+    public static bool ShouldSearchActorPid(ActorGroup group, ExistingCollection existing, int minMovieCount)
+    {
+        if (!string.IsNullOrEmpty(group.ActorId))
+            return false;
+
+        var threshold = minMovieCount < 1 ? 1 : minMovieCount;
+
+        // 还没有对应合集：过得了创建阈值才会建，建的时候才用得上 pid。
+        if (existing is null)
+            return group.MovieIds.Count >= threshold;
+
+        // 合集上没有 pid（多为用户手建的同名合集）要补写；已经有的不再重复搜。
+        return string.IsNullOrEmpty(existing.ActorId);
     }
 
     /// <summary>

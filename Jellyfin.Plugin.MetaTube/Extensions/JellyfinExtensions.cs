@@ -49,12 +49,74 @@ public static class JellyfinExtensions
     #region Collection
 
     /// <summary>
-    /// 取影片的演员清单。10.11 的 BaseItem 上没有 People 属性，只能走 ILibraryManager.GetPeople；
-    /// PersonInfo 到底带不带 MetaTube pid 属服务端行为（设计 V5），由调用方统计命中率。
+    /// 取影片的演员清单。这里只用作「本次扫描里出现了哪些演员」——
+    /// 演职行不存演员 pid（服务端读它时只映射 Id/Name/Role/SortOrder/Type），
+    /// 所以 pid 一律另按演员从 Person 实体取，成员也另按演职表查，见下面两个方法。
     /// </summary>
     public static IReadOnlyList<PersonInfo> GetActors(this ILibraryManager manager, BaseItem item)
     {
         return manager.GetPeople(item).Where(p => p.Type == PersonKind.Actor).ToList();
+    }
+
+    /// <summary>
+    /// 「这位演员参演了哪些影片」，与服务端演员详情页同一口径：直接按演职表取，
+    /// 不要求影片带 MetaTube pid。按本次扫描的影片算成员会漏片（演员页 4 部、合集里只有 1 部即由此而来）。
+    /// 用 InternalItemsQuery.Person（演职名精确匹配，v10.11 BaseItemRepository.cs:1891、
+    /// v12.4 BaseItemRepository.TranslateQuery.cs:461）而不用 PersonIds：后者要先有一条同名同写法的
+    /// Person 条目（它内部还是按 BaseItems.Name→Peoples.Name 联表），条目缺失时静默返回空集。
+    /// 名字必须是库里的原始写法（ActorGroup.CreditNames），这里比较是二进制精确的，规范化过就查不到。
+    /// </summary>
+    public static HashSet<Guid> GetActorMovieIds(this ILibraryManager manager, IEnumerable<string> creditNames)
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var name in creditNames.Where(n => !string.IsNullOrEmpty(n)))
+        {
+            foreach (var item in manager.GetItemList(new InternalItemsQuery
+                     {
+                         Person = name,
+                         MediaTypes = new[] { MediaType.Video },
+                         IncludeItemTypes = new[] { BaseItemKind.Movie }
+                     }))
+                ids.Add(item.Id);
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// 演员 pid 的第一级：读 Person 实体。全库里只有这条 Item 能持久保存演员 pid——
+    /// 刮削影片时 MovieProvider 写在 PersonInfo 上的 pid，由服务端 SavePeopleMetadataAsync
+    /// （v10.11 LibraryManager.cs:3106-3113、v12.4 :3896-3905）抄进 Person 条目入库；
+    /// 演员详情页被单独刮过时 ActorProvider 也直接写它。
+    /// Person 条目可能还不存在（演员从没刮过），也可能被 People 校验任务的清理环节删掉，此时给回空 pid。
+    /// </summary>
+    public static ProviderId ReadActorPid(this ILibraryManager manager, string displayName)
+    {
+        var person = manager.GetPerson(displayName);
+        return person is null ? ProviderId.Parse(null) : person.GetPid(Plugin.ProviderId);
+    }
+
+    /// <summary>
+    /// 把现搜到的演员 pid 落回 Person 实体，下一级任务才不必再搜一遍。
+    /// 口径与 EnsureCollectionPidAsync 相同（MetadataEdit 回写），UpdateItemAsync 对 Person 条目同样会把
+    /// ProviderIds 整体重写入库（v10.11 LibraryManager.cs:2183、v12.4 :2762，无类型门槛）。
+    /// Person 条目还不存在时无从写起：10.11 SDK 上没有 GetOrCreatePerson，插件自己造条目会绕过服务端的
+    /// 演职关联，只能等下次刮削由 SavePeopleMetadataAsync 建出来，这一轮先把 pid 用在合集上。
+    /// </summary>
+    public static async Task WriteActorPidAsync(this ILibraryManager manager, string displayName, string provider,
+        string actorId, ILogger logger, CancellationToken cancellationToken)
+    {
+        var person = manager.GetPerson(displayName);
+        if (person is null)
+        {
+            logger.Debug("No Person item to write actor pid: {0}", displayName);
+            return;
+        }
+
+        person.SetPid(Plugin.ProviderId, provider, actorId);
+        await manager.UpdateItemAsync(person, person, ItemUpdateType.MetadataEdit, cancellationToken)
+            .ConfigureAwait(false);
+        logger.Info("Write actor pid to person item: {0} [{1}]", displayName, $"{provider}:{actorId}");
     }
 
     /// <summary>
