@@ -173,3 +173,6 @@ riderModule.iml
 # Msic
 .DS_Store
 *.zip
+
+# 会话期临时产物（一次性核对脚本、探针中间文件），不入库
+tmp/
