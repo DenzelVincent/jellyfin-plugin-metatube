@@ -37,9 +37,9 @@ public class OrganizeMetadataTask : IScheduledTask
 
     public string Key => $"{Plugin.ProviderName}OrganizeMetadata";
 
-    public string Name => "Organize Metadata";
+    public string Name => "整理元数据";
 
-    public string Description => $"Organizes video metadata provided by {Plugin.ProviderName} in library.";
+    public string Description => $"整理库内由 {Plugin.ProviderName} 提供的影片元数据（中文字幕标记与主图）。";
 
     public string Category => Plugin.ProviderName;
 

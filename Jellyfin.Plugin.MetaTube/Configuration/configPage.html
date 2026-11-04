@@ -44,6 +44,20 @@
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
+                            <input id="chkEnableActorCollections" is="emby-checkbox" name="chkEnableActorCollections" type="checkbox"/>
+                            <span>Enable actor collections</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Create one collection per actor from MetaTube metadata. Maintained by the "同步演员合集" scheduled task (Jellyfin only).</div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="txtActorCollectionMinMovieCount">Actor collection minimum movies:</label>
+                        <input id="txtActorCollectionMinMovieCount" is="emby-input" min="1" name="txtActorCollectionMinMovieCount" step="1" type="number"/>
+                        <div class="fieldDescription">Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
                             <input id="chkEnableDirectors" is="emby-checkbox" name="chkEnableDirectors" type="checkbox"/>
                             <span>Enable directors</span>
                         </label>
@@ -115,7 +129,7 @@
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="txtUncensoredKeywords">Uncensored keywords:</label>
                         <input id="txtUncensoredKeywords" is="emby-input" name="txtUncensoredKeywords" type="text"/>
-                        <div class="fieldDescription">Files ending with these keywords are treated as uncensored, comma separated. (default: U,UC,AI,uncensored,无码,破解)</div>
+                        <div class="fieldDescription">Files ending with these keywords are treated as uncensored, comma separated. (default: U,UC,AI,uncensored,无码,破解,LTX)</div>
                     </div>
 
                     <div class="inputContainer">
@@ -286,6 +300,21 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnableSeriesTranslation" is="emby-checkbox" name="chkEnableSeriesTranslation" type="checkbox"/>
+                            <span>Translate series names</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.</div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtRawSeriesTranslationTable">Series translation table:</label>
+                        <textarea class="emby-input" id="txtRawSeriesTranslationTable" is="emby-input" name="txtRawSeriesTranslationTable" rows="5"></textarea>
+                        <div class="fieldDescription">One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.</div>
+                    </div>
+
                 </div>
 
                 <div class="verticalSection">
@@ -396,6 +425,8 @@
                 $('#txtServer', page).val(config.Server).change();
                 $('#txtToken', page).val(config.Token).change();
                 page.querySelector('#chkEnableCollections').checked = config.EnableCollections;
+                page.querySelector('#chkEnableActorCollections').checked = config.EnableActorCollections;
+                $('#txtActorCollectionMinMovieCount', page).val(config.ActorCollectionMinMovieCount).change();
                 page.querySelector('#chkEnableDirectors').checked = config.EnableDirectors;
                 page.querySelector('#chkEnableRatings').checked = config.EnableRatings;
                 page.querySelector('#chkEnableTrailers').checked = config.EnableTrailers;
@@ -419,6 +450,8 @@
                 $('#txtTaglineTemplate', page).val(config.TaglineTemplate).change();
                 $('#selectTranslationMode', page).val(config.TranslationMode).change();
                 $('#selectTranslationEngine', page).val(config.TranslationEngine).change();
+                page.querySelector('#chkEnableSeriesTranslation').checked = config.EnableSeriesTranslation;
+                $('#txtRawSeriesTranslationTable', page).val(config.RawSeriesTranslationTable).change();
                 $('#txtBaiduAppId', page).val(config.BaiduAppId).change();
                 $('#txtBaiduAppKey', page).val(config.BaiduAppKey).change();
                 $('#txtGoogleApiKey', page).val(config.GoogleApiKey).change();
@@ -445,6 +478,9 @@
                 config.Server = $('#txtServer', form).val();
                 config.Token = $('#txtToken', form).val();
                 config.EnableCollections = $('#chkEnableCollections', form).prop('checked');
+                config.EnableActorCollections = $('#chkEnableActorCollections', form).prop('checked');
+                var actorMin = parseInt($('#txtActorCollectionMinMovieCount', form).val(), 10);
+                config.ActorCollectionMinMovieCount = isNaN(actorMin) ? 3 : Math.max(1, actorMin);
                 config.EnableDirectors = $('#chkEnableDirectors', form).prop('checked');
                 config.EnableRatings = $('#chkEnableRatings', form).prop('checked');
                 config.EnableTrailers = $('#chkEnableTrailers', form).prop('checked');
@@ -468,6 +504,8 @@
                 config.TaglineTemplate = $('#txtTaglineTemplate', form).val();
                 config.TranslationMode = $('#selectTranslationMode', form).val();
                 config.TranslationEngine = $('#selectTranslationEngine', form).val();
+                config.EnableSeriesTranslation = $('#chkEnableSeriesTranslation', form).prop('checked');
+                config.RawSeriesTranslationTable = $('#txtRawSeriesTranslationTable', form).val();
                 config.BaiduAppId = $('#txtBaiduAppId', form).val();
                 config.BaiduAppKey = $('#txtBaiduAppKey', form).val();
                 config.GoogleApiKey = $('#txtGoogleApiKey', form).val();
@@ -510,6 +548,10 @@
                 "Access token for the MetaTube Server, or blank if no token is set by the backend.": "MetaTube 服务端的访问令牌；若后端未设置令牌则留空。",
                 "Enable collections": "启用合集",
                 "Automatically create collections by series.": "按系列自动创建合集。",
+                "Enable actor collections": "启用演员合集",
+                "Create one collection per actor from MetaTube metadata. Maintained by the \"同步演员合集\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
+                "Actor collection minimum movies:": "演员合集最小影片数：",
+                "Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)": "只门控新建：演员至少要有这么多部影片才会新建合集；已存在的合集即使跌破也继续对齐成员。设为 1 即每位演员都建；留空按默认 3 处理。（默认：3）",
                 "Enable directors": "启用导演信息",
                 "Add directors to corresponding video metadata.": "为对应影片的元数据添加导演信息。",
                 "Enable ratings": "启用评分",
@@ -580,6 +622,10 @@
                 "Custom OpenAI-compatible api url. (optional)": "兼容 OpenAI 的自定义 API 地址。（可选）",
                 "OpenAI model:": "OpenAI 模型：",
                 "Custom OpenAI-compatible api model. (optional)": "兼容 OpenAI 的自定义 API 模型。（可选）",
+                "Translate series names": "翻译系列名",
+                "Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.": "翻译系列名；合集名、系列标签与 {series} 模板变量都会跟着变成译文。",
+                "Series translation table:": "系列译文对照表：",
+                "One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.": "每行一条记录，用等号分隔，例如 系列原名=译文；等号右侧留空表示保留原文。表内命中就不再调用翻译引擎。",
                 "Substitution": "替换",
                 "Enable title substitution": "启用标题替换",
                 "Title substitution table:": "标题替换表：",

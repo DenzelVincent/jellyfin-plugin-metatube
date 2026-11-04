@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import copy
 import hashlib
 import json
 import os
@@ -10,11 +11,11 @@ from urllib.request import Request, urlopen
 
 from packaging.version import Version
 
-# The repository that owns the plugin, e.g. "metatube-community/jellyfin-plugin-metatube".
-# GitHub Actions sets GITHUB_REPOSITORY automatically, so a fork publishes a
-# manifest that points at its own releases instead of the upstream ones.
+# The repository that owns this fork's builds. GitHub Actions sets
+# GITHUB_REPOSITORY automatically; the default below is what a local run uses,
+# so it must point at the fork, not at upstream.
 REPOSITORY = os.environ.get('GITHUB_REPOSITORY',
-                            'metatube-community/jellyfin-plugin-metatube')
+                            'DenzelVincent/jellyfin-plugin-metatube')
 
 SOURCE_URL = ('https://github.com/{repository}/releases/download/'
               'v{version}/Jellyfin.MetaTube@v{version}.zip')
@@ -22,6 +23,22 @@ IMAGE_URL = ('https://raw.githubusercontent.com/{repository}/'
              'main/Jellyfin.Plugin.MetaTube/thumb.png')
 MANIFEST_URL = ('https://raw.githubusercontent.com/{repository}/dist/manifest.json')
 RELEASES_API = ('https://api.github.com/repos/{repository}/releases?per_page=100')
+
+# Fallback for the very first publish of a fork: the dist branch does not
+# exist yet, so there is nothing to load. The guid must stay identical to
+# Plugin.Id (Jellyfin.Plugin.MetaTube/Plugin.cs), otherwise the server would
+# treat this as a different plugin.
+SKELETON = [{
+    'guid': '01cc53ec-c415-4108-bbd4-a684a9801a32',
+    'name': 'MetaTube',
+    'description': 'MetaTube 元数据插件（个人分支）：按系列与演员自动创建合集、'
+                   '中文字幕与无码破解角标、字段级聚合与翻译。',
+    'overview': 'Jellyfin/Emby 元数据插件，依赖 MetaTube Server 提供数据。',
+    'owner': 'DenzelVincent',
+    'category': 'Metadata',
+    'imageUrl': '',
+    'versions': []
+}]
 
 
 def md5sum(filename) -> str:
@@ -110,6 +127,26 @@ def get_releases() -> list:
     return result
 
 
+def load_manifest() -> tuple[list, bool]:
+    """Published manifest and whether the built-in skeleton had to stand in.
+
+    Returns ``(manifest, used_skeleton)``: the flag says the seed was
+    unreachable, so ``versions`` starts out empty.
+
+    A fork's first publish has no dist branch yet, and a network hiccup must
+    not abort a release that already built successfully.
+    """
+    try:
+        with urlopen(MANIFEST_URL.format(repository=REPOSITORY), timeout=30) as f:
+            return json.load(f), False
+    except (URLError, OSError, ValueError) as e:
+        # HTTPError 是 URLError 的子类；JSON 解析失败走 ValueError。
+        print(f'warning: published manifest unavailable, using skeleton: {e}; '
+              'a 404 normally means the dist branch does not exist yet, i.e. '
+              'this fork is publishing for the first time', file=sys.stderr)
+        return copy.deepcopy(SKELETON), True
+
+
 def main() -> None:
     filename = sys.argv[1]
     version = filename.split('@', maxsplit=1)[1] \
@@ -119,8 +156,7 @@ def main() -> None:
     csproj = os.path.join(os.path.dirname(__file__),
                           "../Jellyfin.Plugin.MetaTube/Jellyfin.Plugin.MetaTube.csproj")
 
-    with urlopen(MANIFEST_URL.format(repository=REPOSITORY), timeout=30) as f:
-        manifest = json.load(f)
+    manifest, used_skeleton = load_manifest()
 
     plugin = manifest[0]
     plugin['imageUrl'] = IMAGE_URL.format(repository=REPOSITORY)
@@ -129,6 +165,14 @@ def main() -> None:
     try:
         releases = get_releases()
     except (URLError, OSError, ValueError) as e:
+        # 两处兜底叠在一起就会产出错的目录：种子读不到时 plugin['versions'] 为空，
+        # releases API 又失败，写出的 manifest 只剩本次构建，CI 强推 dist 分支后
+        # 已发布的历史会被抹光。宁肯这次发布失败，也不发出没有历史的 manifest。
+        if used_skeleton:
+            print(f'error: no published manifest to keep and releases cannot be '
+                  f'listed, so the catalog would lose every previously published '
+                  f'version: {e}', file=sys.stderr)
+            sys.exit(1)
         # Do not break the release when the API is unavailable: keep the
         # previous entries, only the new one gets the corrected URL.
         print(f'warning: cannot list releases: {e}', file=sys.stderr)

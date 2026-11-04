@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Text;
 using Jellyfin.Plugin.MetaTube.Configuration;
+using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Metadata;
 
 namespace Jellyfin.Plugin.MetaTube.Translation;
@@ -43,6 +44,47 @@ public static class TranslationHelper
         if (Configuration.TranslationMode.HasFlag(TranslationMode.Summary) &&
             !string.IsNullOrWhiteSpace(m.Summary) && !ShouldSkipTranslation(m.Summary, to))
             m.Summary = await TranslateFieldSafeAsync(m.Summary, to, cancellationToken, log).ConfigureAwait(false);
+
+        if (Configuration.EnableSeriesTranslation &&
+            !string.IsNullOrWhiteSpace(m.Series))
+            m.Series = await TranslateSeriesAsync(m.Series, to, cancellationToken, log).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 系列名单独一条链路：先查持久化对照表，命中就不再调引擎（含「表值为空 = 保留原文」）。
+    /// 合集名、系列标签与 {series} 模板变量都取这一个值，所以译法必须每次都一样。
+    /// </summary>
+    private static async Task<string> TranslateSeriesAsync(string series, string to,
+        CancellationToken cancellationToken, Action<string> log)
+    {
+        if (SeriesTranslationStore.TryGetValue(series, out var cached))
+            return string.IsNullOrWhiteSpace(cached) ? series : cached;
+
+        // 目标语言是中文且系列名已含汉字（iqqtv/airav 直接给中文系列名）时省一次调用。
+        if (ShouldSkipTranslation(series, to))
+            return series;
+
+        var translated = await TranslateFieldSafeAsync(series, to, cancellationToken, log).ConfigureAwait(false);
+        // 先裁再比对：不裁的话 " 甲 " != "甲" 会被当成一次成功翻译，把带空白的串当译文入库。
+        translated = translated?.Trim();
+        // 引擎失败时 TranslateFieldSafeAsync 原样返回，此时不写表，免得把原文当译文固化下来。
+        if (string.IsNullOrWhiteSpace(translated) || translated == series)
+            return series;
+
+        // 译文要直接当合集名用，带换行就存不进按行存的译文表、也建不出正常合集；宁可保留原文。
+        if (translated.Contains('\n') || translated.Contains('\r'))
+        {
+            log($"Translated series contains line breaks, keep original: {series}");
+            return series;
+        }
+
+#if !__EMBY__
+        // 生效译文可能不是引擎这次给的：同一系列的另一部影片可能已经先写了一行（Persist 先到先得）。
+        var effective = SeriesTranslationStore.Persist(series, translated, log);
+        return string.IsNullOrWhiteSpace(effective) ? series : effective;
+#else
+        return translated;
+#endif
     }
 
     /// <summary>
@@ -108,6 +150,11 @@ public static class TranslationHelper
     private static async Task LogResolvedModelAsync(CancellationToken cancellationToken, Action<string> log)
     {
         var config = Configuration;
+        // 只有真的会用到 OpenAI（选它，或免费端点失败时回落到它）才值得探测：
+        // 探测是带 10 秒超时的真实请求，端点不可达时每张影片都可能白等一趟。
+        if (config.TranslationEngine != TranslationEngine.OpenAi && !CanFallbackToAi())
+            return;
+
         if (string.IsNullOrWhiteSpace(config.OpenAiApiUrl) || !string.IsNullOrWhiteSpace(config.OpenAiModel))
             return;
 
