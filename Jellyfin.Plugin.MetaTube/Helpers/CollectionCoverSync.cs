@@ -25,6 +25,9 @@ internal static class CollectionCoverSync
     /// <summary>记录这张合集封面是按哪个源文件复制的，用于幂等跳过。</summary>
     private const string StampFileName = ".metatube-cover";
 
+    /// <summary>Person 封面可能用到的扩展名（ImageSaver 按 MIME 决定，常见是 jpg）。</summary>
+    private static readonly string[] PersonImageExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
+
     /// <summary>
     /// 对齐一张合集的主图。返回是否真的写了盘。
     /// 单个合集失败只记日志，不把整轮任务打断（与 ApplyAsync 其它写入口径一致）。
@@ -69,7 +72,25 @@ internal static class CollectionCoverSync
         if (string.IsNullOrWhiteSpace(actorName))
             return null;
 
-        var path = libraryManager.GetPerson(actorName)?.GetImageInfo(ImageType.Primary, 0)?.Path;
+        var person = libraryManager.GetPerson(actorName);
+        if (person is null)
+            return null;
+
+        // Person 的封面固定落在它自己的元数据目录里：ImageSaver 对 Person 的 folderName 恒为 "folder"，
+        // 落 Person.GetInternalMetadataPath()/folder.<ext>（实测 /config/metadata/People/<首字>/<名>/folder.jpg）。
+        // 优先认这个文件：旧版守护会把 Person 的主图指针改到 <首字>/poster.jpg 这种共用文件上（日志实测），
+        // 直接读指针等于把错图复制到合集。
+        if (!string.IsNullOrWhiteSpace(person.Path) && Directory.Exists(person.Path))
+        {
+            foreach (var extension in PersonImageExtensions)
+            {
+                var candidate = Path.Combine(person.Path, "folder" + extension);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        var path = person.GetImageInfo(ImageType.Primary, 0)?.Path;
         if (string.IsNullOrWhiteSpace(path) || PrimaryImageStore.IsRemotePath(path) || !File.Exists(path))
             return null;
 
