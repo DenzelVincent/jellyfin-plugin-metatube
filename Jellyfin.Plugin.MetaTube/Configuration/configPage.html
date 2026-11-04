@@ -148,6 +148,14 @@
                         <div class="fieldDescription">Aspect ratio for primary images, set a negative value to use the default.</div>
                     </div>
 
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnableDmmHdCover" is="emby-checkbox" name="chkEnableDmmHdCover" type="checkbox"/>
+                            <span>Use DMM HD covers</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Rewrite pics.dmm.co.jp cover URLs to the 2184×1468 version on awsimgsrc.dmm.co.jp. Applies to DMM-based sources (JavBus, JAV321, FANZA); covers without a cid stay unchanged. Off by default.</div>
+                    </div>
+
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="txtDefaultImageQuality">Default image quality:</label>
                         <input id="txtDefaultImageQuality" is="emby-input" max="100" min="0" name="txtDefaultImageQuality" step="1" type="number"/>
@@ -439,6 +447,7 @@
                 $('#txtUncensoredKeywords', page).val(config.UncensoredKeywords).change();
                 $('#txtUncensoredBadgeUrl', page).val(config.UncensoredBadgeUrl).change();
                 $('#txtPrimaryImageRatio', page).val(config.PrimaryImageRatio).change();
+                page.querySelector('#chkEnableDmmHdCover').checked = config.EnableDmmHdCover;
                 $('#txtDefaultImageQuality', page).val(config.DefaultImageQuality).change();
                 page.querySelector('#chkEnableMovieProviderFilter').checked = config.EnableMovieProviderFilter;
                 $('#txtRawMovieProviderFilter', page).val(config.RawMovieProviderFilter).change();
@@ -493,6 +502,7 @@
                 config.UncensoredKeywords = $('#txtUncensoredKeywords', form).val();
                 config.UncensoredBadgeUrl = $('#txtUncensoredBadgeUrl', form).val();
                 config.PrimaryImageRatio = $('#txtPrimaryImageRatio', form).val();
+                config.EnableDmmHdCover = $('#chkEnableDmmHdCover', form).prop('checked');
                 config.DefaultImageQuality = $('#txtDefaultImageQuality', form).val();
                 config.EnableMovieProviderFilter = $('#chkEnableMovieProviderFilter', form).prop('checked');
                 config.RawMovieProviderFilter = $('#txtRawMovieProviderFilter', form).val();

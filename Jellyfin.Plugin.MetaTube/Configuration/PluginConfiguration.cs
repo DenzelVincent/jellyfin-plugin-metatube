@@ -132,6 +132,16 @@ public class PluginConfiguration : BasePluginConfiguration
     public double PrimaryImageRatio { get; set; } = -1;
 
 #if __EMBY__
+    [DisplayName("DMM 高清封面")]
+    [Description("把 DMM 老 CDN 的封面地址改写为新 CDN 的高清版本（2184×1468）；取不到 cid 时保持原图。默认关闭。")]
+#endif
+    /// <summary>
+    /// 上游 issue 653：JavBus/JAV321 的 cover_url 是 pics.dmm.co.jp 的 800×538 转存图，
+    /// 同一作品在 awsimgsrc.dmm.co.jp 上有 2184×1468 版本。打开后只改写地址，由服务端照常取图。
+    /// </summary>
+    public bool EnableDmmHdCover { get; set; } = false;
+
+#if __EMBY__
     [DisplayName("默认图片质量")]
     [Description("JPEG 图片的默认压缩质量，取值范围 0~100。（默认：90）")]
     [MinValue(0)]

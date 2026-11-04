@@ -52,9 +52,17 @@ internal static class PrimaryImageSync
         {
             var m = await ApiClient.GetMovieInfoAsync(pid.Provider, pid.Id, cancellationToken)
                 .ConfigureAwait(false);
-            url = ApiClient.GetPrimaryImageApiUrl(
-                m.Provider, m.Id, pid.Position ?? -1,
-                string.IsNullOrEmpty(badge) ? null : badge);
+
+            // 与 MovieImageProvider 同一口径（上游 issue 653）：开关打开且封面在 DMM 图床上时换成高清版。
+            var coverUrl = Plugin.Instance.Configuration.EnableDmmHdCover
+                ? DmmCoverRewrite.TryGetHdUrl(m.CoverUrl)
+                : null;
+
+            url = coverUrl is null
+                ? ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, pid.Position ?? -1,
+                    string.IsNullOrEmpty(badge) ? null : badge)
+                : ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, coverUrl, pid.Position ?? -1,
+                    badge: string.IsNullOrEmpty(badge) ? null : badge);
         }
         catch (Exception e)
         {

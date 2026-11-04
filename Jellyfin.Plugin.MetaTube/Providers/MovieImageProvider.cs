@@ -49,11 +49,16 @@ public class MovieImageProvider : BaseProvider, IRemoteImageProvider, IHasOrder
                 var m = await ApiClient.GetMovieInfoAsync(candidate.Provider, candidate.Id,
                     cancellationToken);
                 var position = candidate.Position ?? -1;
+                // 上游 issue 653：DMM 系源的 cover_url 是 800×538 转存图，打开开关后换成新 CDN 的高清版；
+                // 取不到 cid 时保持原来的「由服务端自己取封面」口径。
+                var coverUrl = Configuration.EnableDmmHdCover ? DmmCoverRewrite.TryGetHdUrl(m.CoverUrl) : null;
                 images.Add(new RemoteImageInfo
                 {
                     ProviderName = Name,
                     Type = ImageType.Primary,
-                    Url = ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, position, badge)
+                    Url = coverUrl is null
+                        ? ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, position, badge)
+                        : ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, coverUrl, position, badge: badge)
                 });
                 images.Add(new RemoteImageInfo
                 {
