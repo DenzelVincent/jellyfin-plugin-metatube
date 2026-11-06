@@ -242,6 +242,21 @@ public class ActorCollectionSyncTests
     }
 
     [Fact]
+    // 单片增量同步只把「本批影片」放进移除作用域：现有合集里的其它影片不参与差集，
+    // 不会被当成「本次没刮到这位演员」而误删（2026-11-06 R7）。
+    public void Plan_IncrementalScopeOnlyAddsPendingMovie()
+    {
+        var existing = Existing(D, "有栖", "Gfriends", "g-1", A, B, C);
+        var group = Group("有栖", "Gfriends", "g-1", D);
+
+        var plan = ActorCollectionSync.Plan(group, existing, new[] { D }, 3);
+
+        Assert.Equal(ActorCollectionSync.SyncAction.Update, plan.Action);
+        Assert.Equal(new[] { D }, plan.AddItemIds);
+        Assert.Empty(plan.RemoveItemIds);
+    }
+
+    [Fact]
     // 同名命中要补写 pid，否则 CollectionImageProvider 解析不到封面。
     public void Plan_RequestsPidWriteWhenNameHitHasNoPid()
     {
