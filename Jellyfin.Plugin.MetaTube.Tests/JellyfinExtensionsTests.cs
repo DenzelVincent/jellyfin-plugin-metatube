@@ -28,4 +28,13 @@ public class JellyfinExtensionsTests
         movie.ProviderIds["MetaTube"] = string.Empty;
         Assert.False(movie.HasMetaTubePid());
     }
+
+    [Fact]
+    public void BuildMetaTubeProviderFilter_IncludesBothHistoricalCasings()
+    {
+        var filter = JellyfinExtensions.BuildMetaTubeProviderFilter();
+
+        Assert.Contains("MetaTube", filter.Keys);
+        Assert.Contains("metatube", filter.Keys);
+    }
 }

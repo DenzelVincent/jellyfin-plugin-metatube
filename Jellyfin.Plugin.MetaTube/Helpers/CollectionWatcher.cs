@@ -161,8 +161,7 @@ public sealed class CollectionWatcher : IHostedService
         if (config is null || !config.EnableActorCollections)
             return;
 
-        var pid = movie.GetPid(Plugin.ProviderId);
-        if (string.IsNullOrEmpty(pid.Provider) || string.IsNullOrEmpty(pid.Id))
+        if (!movie.HasMetaTubePid())
             return;
 
         _pendingMovies[movie.Id] = DateTime.UtcNow;
@@ -306,8 +305,7 @@ public sealed class CollectionWatcher : IHostedService
                 continue;
 
             // 事件到落库之间影片可能被删或重新识别；与计划任务同口径再筛一次。
-            var pid = movie.GetPid(Plugin.ProviderId);
-            if (string.IsNullOrEmpty(pid.Provider) || string.IsNullOrEmpty(pid.Id))
+            if (!movie.HasMetaTubePid())
                 continue;
 
             scopedIds.Add(movie.Id);

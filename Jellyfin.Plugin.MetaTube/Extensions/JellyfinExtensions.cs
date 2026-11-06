@@ -56,6 +56,20 @@ public static class JellyfinExtensions
         return !string.IsNullOrEmpty(pid.Provider) && !string.IsNullOrEmpty(pid.Id);
     }
 
+    /// <summary>
+    /// 数据库筛片用的 provider 过滤：历史数据有 "MetaTube" / "metatube" 两种写法，
+    /// 数据库查询区分大小写，必须两种都带上。不要退回「查全部影片再按内存 ProviderIds 过滤」——
+    /// GetItemList 在不带用户/字段过滤的调用方式下不一定返回全库影片。
+    /// </summary>
+    public static Dictionary<string, string> BuildMetaTubeProviderFilter()
+    {
+        return new Dictionary<string, string>
+        {
+            { Plugin.ProviderId, string.Empty },
+            { Plugin.ProviderId.ToLowerInvariant(), string.Empty }
+        };
+    }
+
     #endregion
 
     #region Collection

@@ -74,13 +74,14 @@ public class OrganizeMetadataTask : IScheduledTask
             IncludeItemTypes = new[] { nameof(Movie) }
         }).ToList();
 #else
-        // 不能加 HasAnyProviderId：库里历史数据的 provider key 有 "MetaTube"/"metatube" 两种写法，
-        // 数据库查询大小写敏感会漏片；查全部影片后按内存里的 ProviderIds（OrdinalIgnoreCase）过滤。
+        // 库里历史数据的 provider key 有 "MetaTube"/"metatube" 两种写法，数据库查询大小写敏感，
+        // 过滤条件必须把两种写法都带上。
         var items = _libraryManager.GetItemList(new InternalItemsQuery
         {
             MediaTypes = new[] { MediaType.Video },
-            IncludeItemTypes = new[] { BaseItemKind.Movie }
-        }).Where(item => item.HasMetaTubePid()).ToList();
+            IncludeItemTypes = new[] { BaseItemKind.Movie },
+            HasAnyProviderId = JellyfinExtensions.BuildMetaTubeProviderFilter()
+        }).ToList();
 #endif
 
         foreach (var (idx, item) in items.WithIndex())
