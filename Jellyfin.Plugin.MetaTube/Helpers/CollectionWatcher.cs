@@ -298,6 +298,8 @@ public sealed class CollectionWatcher : IHostedService
 
         var refs = new List<ActorCollectionSync.ActorRef>();
         var scopedIds = new HashSet<Guid>();
+        var noActorIds = new List<Guid>();
+        var withActorIds = new List<Guid>();
         foreach (var movieId in movieIds)
         {
             if (_libraryManager.GetItemById(movieId) is not Movie movie)
@@ -309,19 +311,37 @@ public sealed class CollectionWatcher : IHostedService
                 continue;
 
             scopedIds.Add(movie.Id);
-            refs.AddRange(_libraryManager.GetActors(movie)
-                .Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
+            var actors = _libraryManager.GetActors(movie);
+            if (actors.Any(actor => !string.IsNullOrWhiteSpace(actor.Name)))
+                withActorIds.Add(movie.Id);
+            else
+                noActorIds.Add(movie.Id);
+
+            refs.AddRange(actors.Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
 
         if (scopedIds.Count == 0)
             return;
 
+        // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId），不是 pid 里的来源段。
+        var collections = _libraryManager.ReadCollections(Plugin.ProviderId);
+
+        // 无演员影片：单片刷新后即时加入/移出；即使本批没有任何演员分组也要执行。
+        try
+        {
+            await NoActorCollectionSync.SyncAsync(_collectionManager, noActorIds, withActorIds, collections, _logger,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning("Sync no-actor collection after movie update failed: {0}", e.Message);
+        }
+
         var groups = ActorCollectionSync.Build(refs);
         if (groups.Count == 0)
             return;
 
-        // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId），不是 pid 里的来源段。
-        var index = new ActorCollectionSync.Index(_libraryManager.ReadCollections(Plugin.ProviderId));
+        var index = new ActorCollectionSync.Index(collections);
         var updater = new ActorCollectionUpdater(_libraryManager, _collectionManager, _providerManager, _logger);
 
         var created = 0;

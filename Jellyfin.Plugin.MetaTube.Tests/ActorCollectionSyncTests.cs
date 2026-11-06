@@ -372,6 +372,42 @@ public class ActorCollectionSyncTests
     }
 
     [Fact]
+    // 「无演员影片」合集不存在且有目标影片：新建并一次收全。
+    public void PlanNoActorCollection_CreatesWhenMissingAndHasTargets()
+    {
+        var plan = ActorCollectionSync.PlanNoActorCollection(new[] { B, A }, Array.Empty<Guid>(), null);
+
+        Assert.True(plan.Create);
+        Assert.Equal(new[] { A, B }, plan.AddItemIds);
+        Assert.Empty(plan.RemoveItemIds);
+    }
+
+    [Fact]
+    // 没有无演员影片、合集也不存在：不建空合集。
+    public void PlanNoActorCollection_DoesNotCreateWhenNoTargets()
+    {
+        var plan = ActorCollectionSync.PlanNoActorCollection(Array.Empty<Guid>(), Array.Empty<Guid>(), null);
+
+        Assert.False(plan.Create);
+        Assert.Empty(plan.AddItemIds);
+        Assert.Empty(plan.RemoveItemIds);
+    }
+
+    [Fact]
+    // 只增补目标影片、只移除「现在有演员」的成员；手工加入且不在移除作用域的条目不动。
+    public void PlanNoActorCollection_AddsAndRemovesOnlyWithinWithActorScope()
+    {
+        var existing = Existing(D, "无演员影片", memberIds: new[] { A, B, C });
+
+        var plan = ActorCollectionSync.PlanNoActorCollection(new[] { A, D }, new[] { B }, existing);
+
+        Assert.False(plan.Create);
+        Assert.Equal(D, plan.CollectionId);
+        Assert.Equal(new[] { D }, plan.AddItemIds);
+        Assert.Equal(new[] { B }, plan.RemoveItemIds);
+    }
+
+    [Fact]
     // 演员有 Person 主图且合集已经一致：零写盘（R-V4 幂等的纯计算部分）。
     public void PlanCover_SkipsWhenCollectionAlreadyMatchesPersonImage()
     {

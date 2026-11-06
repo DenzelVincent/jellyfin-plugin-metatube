@@ -314,6 +314,50 @@ public static class ActorCollectionSync
         };
     }
 
+    /// <summary>「无演员影片」合集的对齐计划。</summary>
+    public sealed class NoActorCollectionPlan
+    {
+        /// <summary>合集不存在且需要新建。</summary>
+        public bool Create { get; init; }
+
+        public Guid? CollectionId { get; init; }
+
+        public IReadOnlyList<Guid> AddItemIds { get; init; } = Array.Empty<Guid>();
+
+        public IReadOnlyList<Guid> RemoveItemIds { get; init; } = Array.Empty<Guid>();
+    }
+
+    /// <summary>
+    /// 计算「无演员影片」合集的增删。
+    /// noActorMovieIds 是要收进合集的影片；withActorMovieIds 是移除作用域，
+    /// 只移除「现在有演员」且确实在合集里的影片，手工加入的非 MetaTube 条目不在作用域内。
+    /// </summary>
+    public static NoActorCollectionPlan PlanNoActorCollection(
+        IReadOnlyCollection<Guid> noActorMovieIds,
+        IReadOnlyCollection<Guid> withActorMovieIds,
+        ExistingCollection existing)
+    {
+        var target = new HashSet<Guid>(noActorMovieIds ?? Array.Empty<Guid>());
+        var removeScope = new HashSet<Guid>(withActorMovieIds ?? Array.Empty<Guid>());
+
+        if (existing is null)
+        {
+            return new NoActorCollectionPlan
+            {
+                Create = target.Count > 0,
+                AddItemIds = target.OrderBy(id => id).ToList()
+            };
+        }
+
+        var members = existing.MemberIds ?? new HashSet<Guid>();
+        return new NoActorCollectionPlan
+        {
+            CollectionId = existing.Id,
+            AddItemIds = target.Except(members).OrderBy(id => id).ToList(),
+            RemoveItemIds = members.Intersect(removeScope).OrderBy(id => id).ToList()
+        };
+    }
+
     /// <summary>
     /// 两个 pid 是否指向同一位演员：provider 段大小写不敏感（与 Jellyfin 的 ProviderIds 字典同口径），
     /// id 段按序数——判据与 Index 的两级索引一致。

@@ -84,6 +84,8 @@ public class SyncActorCollectionsTask : IScheduledTask
         var scopedIds = new HashSet<Guid>(movies.Select(m => m.Id));
 
         var refs = new List<ActorCollectionSync.ActorRef>();
+        var noActorIds = new List<Guid>();
+        var withActorIds = new List<Guid>();
         foreach (var (idx, movie) in movies.WithIndex())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -91,13 +93,19 @@ public class SyncActorCollectionsTask : IScheduledTask
 
             // 本次扫描只用来回答「库里出现了哪些演员」。演职行不带演员 pid（服务端只回读
             // Id/Name/Role/SortOrder/Type），成员和 pid 都另按演员查，见下面按演员的循环。
-            refs.AddRange(_libraryManager.GetActors(movie)
-                .Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
+            var actors = _libraryManager.GetActors(movie);
+            if (actors.Any(actor => !string.IsNullOrWhiteSpace(actor.Name)))
+                withActorIds.Add(movie.Id);
+            else
+                noActorIds.Add(movie.Id);
+
+            refs.AddRange(actors.Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
 
         var groups = ActorCollectionSync.Build(refs);
         // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
-        var index = new ActorCollectionSync.Index(_libraryManager.ReadCollections(Plugin.ProviderId));
+        var collections = _libraryManager.ReadCollections(Plugin.ProviderId);
+        var index = new ActorCollectionSync.Index(collections);
         var updater = new ActorCollectionUpdater(_libraryManager, _collectionManager, _providerManager, _logger);
 
         var created = 0;
@@ -144,6 +152,18 @@ public class SyncActorCollectionsTask : IScheduledTask
                 // 单个演员失败只记日志并继续，与 OrganizeMetadataTask 同口径（设计 4.3）。
                 _logger.Error("Sync actor collection error: {0} ({1})", group.DisplayName, e.Message);
             }
+        }
+
+        // 无演员影片单独归集；withActorIds 只用于移出，不碰手工加入的非 MetaTube 条目。
+        try
+        {
+            await NoActorCollectionSync.SyncAsync(_collectionManager, noActorIds, withActorIds, collections,
+                _logger, cancellationToken).ConfigureAwait(false);
+            _logger.Debug("No-actor movies: {0}, with actors: {1}", noActorIds.Count, withActorIds.Count);
+        }
+        catch (Exception e)
+        {
+            _logger.Error("Sync no-actor collection error: {0}", e.Message);
         }
 
         // 空合集清理：即时清理交给 CollectionWatcher 的事件监听，这里兜住「停机期间删了影片」的情况。
