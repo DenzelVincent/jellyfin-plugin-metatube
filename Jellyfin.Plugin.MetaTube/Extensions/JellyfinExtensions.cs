@@ -44,6 +44,18 @@ public static class JellyfinExtensions
         movie.CollectionName = name;
     }
 
+    /// <summary>
+    /// 影片是否带 MetaTube pid。
+    /// 不能用 InternalItemsQuery.HasAnyProviderId 过滤：库里历史数据的 provider key 有
+    /// "MetaTube" / "metatube" 两种写法，数据库查询是大小写敏感的，会漏掉另一半影片；
+    /// 内存里的 ProviderIds 是 OrdinalIgnoreCase，这里统一按内存口径判断。
+    /// </summary>
+    public static bool HasMetaTubePid(this BaseItem item)
+    {
+        var pid = item.GetPid(Plugin.ProviderId);
+        return !string.IsNullOrEmpty(pid.Provider) && !string.IsNullOrEmpty(pid.Id);
+    }
+
     #endregion
 
     #region Collection

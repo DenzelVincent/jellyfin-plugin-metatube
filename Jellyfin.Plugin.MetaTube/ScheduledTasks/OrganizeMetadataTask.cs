@@ -66,17 +66,22 @@ public class OrganizeMetadataTask : IScheduledTask
 
         progress?.Report(0);
 
+#if __EMBY__
         var items = _libraryManager.GetItemList(new InternalItemsQuery
         {
             MediaTypes = new[] { MediaType.Video },
-#if __EMBY__
             HasAnyProviderId = new[] { Plugin.ProviderId },
-            IncludeItemTypes = new[] { nameof(Movie) },
-#else
-            HasAnyProviderId = new Dictionary<string, string> { { Plugin.ProviderId, string.Empty } },
-            IncludeItemTypes = new[] { BaseItemKind.Movie }
-#endif
+            IncludeItemTypes = new[] { nameof(Movie) }
         }).ToList();
+#else
+        // 不能加 HasAnyProviderId：库里历史数据的 provider key 有 "MetaTube"/"metatube" 两种写法，
+        // 数据库查询大小写敏感会漏片；查全部影片后按内存里的 ProviderIds（OrdinalIgnoreCase）过滤。
+        var items = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            MediaTypes = new[] { MediaType.Video },
+            IncludeItemTypes = new[] { BaseItemKind.Movie }
+        }).Where(item => item.HasMetaTubePid()).ToList();
+#endif
 
         foreach (var (idx, item) in items.WithIndex())
         {

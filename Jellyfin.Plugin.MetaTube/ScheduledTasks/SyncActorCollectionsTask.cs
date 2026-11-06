@@ -72,12 +72,13 @@ public class SyncActorCollectionsTask : IScheduledTask
         progress?.Report(0);
 
         // 查询条件与 OrganizeMetadataTask 一致：只处理本插件刮出来的影片。
+        // 不能加 HasAnyProviderId：库里历史数据的 provider key 有 "MetaTube"/"metatube" 两种写法，
+        // 数据库查询大小写敏感会漏片；改为查全部影片后按内存里的 ProviderIds（OrdinalIgnoreCase）过滤。
         var movies = _libraryManager.GetItemList(new InternalItemsQuery
         {
             MediaTypes = new[] { MediaType.Video },
-            HasAnyProviderId = new Dictionary<string, string> { { Plugin.ProviderId, string.Empty } },
             IncludeItemTypes = new[] { BaseItemKind.Movie }
-        }).ToList();
+        }).Where(movie => movie.HasMetaTubePid()).ToList();
 
         // 成员对齐的作用域：只有本次扫到的影片能被移出合集。
         var scopedIds = new HashSet<Guid>(movies.Select(m => m.Id));
