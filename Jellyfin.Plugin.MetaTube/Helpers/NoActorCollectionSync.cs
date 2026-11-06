@@ -2,6 +2,8 @@
 using Jellyfin.Plugin.MetaTube.Extensions;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MetaTube.Helpers;
@@ -19,7 +21,7 @@ public static class NoActorCollectionSync
     /// 对齐合集：noActorMovieIds 要收进去，withActorMovieIds 是移除作用域。
     /// 合集不存在时只在确实有目标影片时才创建；没有目标且合集也不存在时什么都不做。
     /// </summary>
-    public static async Task SyncAsync(ICollectionManager collectionManager,
+    public static async Task SyncAsync(ILibraryManager libraryManager, ICollectionManager collectionManager,
         IReadOnlyCollection<Guid> noActorMovieIds, IReadOnlyCollection<Guid> withActorMovieIds,
         IReadOnlyList<ActorCollectionSync.ExistingCollection> collections, ILogger logger,
         CancellationToken cancellationToken)
@@ -64,6 +66,24 @@ public static class NoActorCollectionSync
                 .ConfigureAwait(false);
             logger.Info("Remove {0} movie(s) from no-actor collection", plan.RemoveItemIds.Count);
         }
+
+        // 单片刷新把最后一个成员移出后也立即删掉合集，不等每日任务里的 EmptyCollectionCleaner。
+        // 本轮有新增时不判空：AddToCollectionAsync 刚写完，缓存里的 LinkedChildren 可能还没刷新。
+        if (plan.AddItemIds.Count == 0)
+            DeleteIfEmpty(libraryManager, existing.Id, logger);
+    }
+
+    private static void DeleteIfEmpty(ILibraryManager libraryManager, Guid collectionId, ILogger logger)
+    {
+        if (libraryManager.GetItemById(collectionId) is not BoxSet box)
+            return;
+
+        if ((box.LinkedChildren ?? Array.Empty<LinkedChild>()).Any(child => child.ItemId.HasValue))
+            return;
+
+        // 与 Jellyfin 自己删除合集一致：条目与合集目录一起删，否则空目录会被下次扫描捡回来。
+        libraryManager.DeleteItem(box, new DeleteOptions { DeleteFileLocation = true });
+        logger.Info("Remove empty no-actor collection: {0}", box.Name);
     }
 }
 #endif

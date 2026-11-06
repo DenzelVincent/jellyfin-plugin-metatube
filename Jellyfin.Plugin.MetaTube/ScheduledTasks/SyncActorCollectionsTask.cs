@@ -157,8 +157,8 @@ public class SyncActorCollectionsTask : IScheduledTask
         // 无演员影片单独归集；withActorIds 只用于移出，不碰手工加入的非 MetaTube 条目。
         try
         {
-            await NoActorCollectionSync.SyncAsync(_collectionManager, noActorIds, withActorIds, collections,
-                _logger, cancellationToken).ConfigureAwait(false);
+            await NoActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, noActorIds, withActorIds,
+                collections, _logger, cancellationToken).ConfigureAwait(false);
             _logger.Debug("No-actor movies: {0}, with actors: {1}", noActorIds.Count, withActorIds.Count);
         }
         catch (Exception e)

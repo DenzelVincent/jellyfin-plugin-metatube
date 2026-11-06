@@ -329,8 +329,8 @@ public sealed class CollectionWatcher : IHostedService
         // 无演员影片：单片刷新后即时加入/移出；即使本批没有任何演员分组也要执行。
         try
         {
-            await NoActorCollectionSync.SyncAsync(_collectionManager, noActorIds, withActorIds, collections, _logger,
-                CancellationToken.None).ConfigureAwait(false);
+            await NoActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, noActorIds, withActorIds,
+                collections, _logger, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception e)
         {
