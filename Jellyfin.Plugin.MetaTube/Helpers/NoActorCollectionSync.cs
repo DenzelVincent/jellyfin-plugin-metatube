@@ -48,6 +48,9 @@ public static class NoActorCollectionSync
             if (missing.Count > 0)
                 await collectionManager.AddToCollectionAsync(box.Id, missing).ConfigureAwait(false);
 
+            await libraryManager.SyncCollectionCountRatingAsync(box.Id, logger, cancellationToken)
+                .ConfigureAwait(false);
+
             return;
         }
 
@@ -71,6 +74,10 @@ public static class NoActorCollectionSync
         // 本轮有新增时不判空：AddToCollectionAsync 刚写完，缓存里的 LinkedChildren 可能还没刷新。
         if (plan.AddItemIds.Count == 0)
             DeleteIfEmpty(libraryManager, existing.Id, logger);
+
+        // 上一步可能刚把合集删掉，这里取不到条目就由 helper 自己返回，不会写库。
+        await libraryManager.SyncCollectionCountRatingAsync(existing.Id, logger, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static void DeleteIfEmpty(ILibraryManager libraryManager, Guid collectionId, ILogger logger)

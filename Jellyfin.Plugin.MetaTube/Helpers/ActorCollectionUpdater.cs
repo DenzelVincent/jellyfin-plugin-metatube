@@ -134,6 +134,12 @@ public sealed class ActorCollectionUpdater
 
             // 成员这轮没变，但封面仍要对齐：演员换了 Person 头像也要跟着换（用户口径）。
             await AlignCoverAsync(plan, cancellationToken).ConfigureAwait(false);
+
+            // 片数不只在成员变更时才写：开关是后来才打开的，成员没动的合集也要在这一轮补上值。
+            if (plan.CollectionId is { } unchangedId)
+                await _libraryManager.SyncCollectionCountRatingAsync(unchangedId, _logger, cancellationToken)
+                    .ConfigureAwait(false);
+
             return ActorCollectionSync.SyncAction.None;
         }
 
@@ -163,6 +169,10 @@ public sealed class ActorCollectionUpdater
 
             // 新建的合集立刻对齐一次封面，首次打开就有演员图，不必等下一轮或一次图片刷新。
             await AlignCoverAsync(box, plan, cancellationToken).ConfigureAwait(false);
+
+            // 片数单独回写一次：CollectionCreationOptions 没有评分位，只能在成员落定后补。
+            await _libraryManager.SyncCollectionCountRatingAsync(box.Id, _logger, cancellationToken)
+                .ConfigureAwait(false);
 
             return plan.Action;
         }
@@ -195,6 +205,11 @@ public sealed class ActorCollectionUpdater
         // 成员与 pid 都写完之后再对齐封面：封面用的是演员 Person 条目，不依赖合集上的 pid，
         // 但放在后面可以让「新建/改成员」的那一次刷新与换图错开。
         await AlignCoverAsync(plan, cancellationToken).ConfigureAwait(false);
+
+        // 片数排在 pid 回写之后：EnsureCollectionPidAsync 自己会读一份合集快照，
+        // 这里再读一次才能拿到成员增删后的最新链接，不会把刚改完的成员数算旧。
+        await _libraryManager.SyncCollectionCountRatingAsync(collectionId, _logger, cancellationToken)
+            .ConfigureAwait(false);
 
         return plan.Action;
     }

@@ -37,4 +37,29 @@ public class JellyfinExtensionsTests
         Assert.Contains("MetaTube", filter.Keys);
         Assert.Contains("metatube", filter.Keys);
     }
+
+    /// <summary>
+    /// 片数写入的落库判据：值没变就不写，尤其「两边都是 null」不能算需要写，
+    /// 否则关掉开关后每轮还会给每个合集各补一次空值更新。
+    /// </summary>
+    [Fact]
+    public void NeedsCountRatingWrite_FalseWhenBothValuesAreNull()
+    {
+        Assert.False(JellyfinExtensions.NeedsCountRatingWrite(null, null));
+    }
+
+    [Fact]
+    public void NeedsCountRatingWrite_TrueWhenValueAppearsOrDisappears()
+    {
+        Assert.True(JellyfinExtensions.NeedsCountRatingWrite(null, 12));
+        Assert.True(JellyfinExtensions.NeedsCountRatingWrite(12, null));
+        Assert.True(JellyfinExtensions.NeedsCountRatingWrite(12, 13));
+    }
+
+    [Fact]
+    public void NeedsCountRatingWrite_FalseWhenCountUnchanged()
+    {
+        Assert.False(JellyfinExtensions.NeedsCountRatingWrite(12, 12));
+        Assert.False(JellyfinExtensions.NeedsCountRatingWrite(0, 0));
+    }
 }

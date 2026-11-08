@@ -58,6 +58,14 @@
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
+                            <input id="chkEnableCollectionCountRating" is="emby-checkbox" name="chkEnableCollectionCountRating" type="checkbox"/>
+                            <span>Sort collections by movie count</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Writes each collection's live movie count into its own community rating, so the library page's Ratings sort orders collections by count. The stars show the count, not a rating. Collections this plugin never touched keep no value. (default: off)</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
                             <input id="chkEnableDirectors" is="emby-checkbox" name="chkEnableDirectors" type="checkbox"/>
                             <span>Enable directors</span>
                         </label>
@@ -435,6 +443,7 @@
                 page.querySelector('#chkEnableCollections').checked = config.EnableCollections;
                 page.querySelector('#chkEnableActorCollections').checked = config.EnableActorCollections;
                 $('#txtActorCollectionMinMovieCount', page).val(config.ActorCollectionMinMovieCount).change();
+                page.querySelector('#chkEnableCollectionCountRating').checked = config.EnableCollectionCountRating;
                 page.querySelector('#chkEnableDirectors').checked = config.EnableDirectors;
                 page.querySelector('#chkEnableRatings').checked = config.EnableRatings;
                 page.querySelector('#chkEnableTrailers').checked = config.EnableTrailers;
@@ -490,6 +499,7 @@
                 config.EnableActorCollections = $('#chkEnableActorCollections', form).prop('checked');
                 var actorMin = parseInt($('#txtActorCollectionMinMovieCount', form).val(), 10);
                 config.ActorCollectionMinMovieCount = isNaN(actorMin) ? 3 : Math.max(1, actorMin);
+                config.EnableCollectionCountRating = $('#chkEnableCollectionCountRating', form).prop('checked');
                 config.EnableDirectors = $('#chkEnableDirectors', form).prop('checked');
                 config.EnableRatings = $('#chkEnableRatings', form).prop('checked');
                 config.EnableTrailers = $('#chkEnableTrailers', form).prop('checked');
@@ -562,6 +572,8 @@
                 "Create one collection per actor from MetaTube metadata. Maintained by the \"同步演员合集\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
                 "Actor collection minimum movies:": "演员合集最小影片数：",
                 "Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)": "只门控新建：演员至少要有这么多部影片才会新建合集；已存在的合集即使跌破也继续对齐成员。设为 1 即每位演员都建；留空按默认 3 处理。（默认：3）",
+                "Sort collections by movie count": "按片数排序合集",
+                "Writes each collection's live movie count into its own community rating, so the library page's Ratings sort orders collections by count. The stars show the count, not a rating. Collections this plugin never touched keep no value. (default: off)": "把每个合集内存活的影片数写进该合集自己的公众评分，于是库页排序选「公众评分」就是按片数排；星星位置显示的数字是片数，不是评分。插件没碰过的合集不会被写入。（默认关闭）",
                 "Enable directors": "启用导演信息",
                 "Add directors to corresponding video metadata.": "为对应影片的元数据添加导演信息。",
                 "Enable ratings": "启用评分",

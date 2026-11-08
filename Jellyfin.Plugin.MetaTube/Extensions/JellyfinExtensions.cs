@@ -196,6 +196,55 @@ public static class JellyfinExtensions
         logger.Info("Write actor pid to collection: {0} [{1}]", item.Name, $"{provider}:{actorId}");
     }
 
+    /// <summary>
+    /// 合集内的存活成员数：LinkedChildren 的外键是 NoAction，影片删掉后链接还留着，
+    /// 所以不能直接取链接条数。按去重后的成员 id 做一次批量查询，回来的才是真存在的。
+    /// 查询不带用户过滤，统计的是库里真实存在的成员数；受限用户看到的角标可能比它小。
+    /// </summary>
+    public static int CountLivingMembers(this ILibraryManager manager, BoxSet box)
+    {
+        var ids = (box.LinkedChildren ?? Array.Empty<LinkedChild>())
+            .Where(child => child.ItemId.HasValue)
+            .Select(child => child.ItemId.Value)
+            .Distinct()
+            .ToArray();
+
+        return ids.Length == 0 ? 0 : manager.GetItemList(new InternalItemsQuery { ItemIds = ids }).Count;
+    }
+
+    /// <summary>
+    /// 值没变就不落库。两边都是 null 也算一致，否则关掉开关后每轮还会各写一次空值。
+    /// 纯判据，便于离线测试。
+    /// </summary>
+    public static bool NeedsCountRatingWrite(float? current, float? target)
+    {
+        return current != target;
+    }
+
+    /// <summary>
+    /// 按 EnableCollectionCountRating 对齐合集上的片数：开着写存活片数，关着清成 null。
+    /// 每次调用现读配置，改开关不用等重启；合集刚被删掉时取不到条目，直接返回。
+    /// </summary>
+    public static async Task SyncCollectionCountRatingAsync(this ILibraryManager manager, Guid collectionId,
+        ILogger logger, CancellationToken cancellationToken)
+    {
+        if (manager.GetItemById(collectionId) is not BoxSet box)
+            return;
+
+        float? target = null;
+        if (Plugin.Instance.Configuration.EnableCollectionCountRating)
+            target = manager.CountLivingMembers(box);
+
+        if (!NeedsCountRatingWrite(box.CommunityRating, target))
+            return;
+
+        box.CommunityRating = target;
+        await manager.UpdateItemAsync(box, box, ItemUpdateType.MetadataEdit, cancellationToken)
+            .ConfigureAwait(false);
+        logger.Debug("Collection count rating: {0} -> {1}", box.Name,
+            target.HasValue ? target.Value.ToString("0") : "null");
+    }
+
     #endregion
 }
 

@@ -57,6 +57,15 @@ public class PluginConfiguration : BasePluginConfiguration
     /// 只门控「新建」：跌破阈值不回收已有合集，已存在的合集继续对齐成员（设计 D12）。
     /// </summary>
     public int ActorCollectionMinMovieCount { get; set; } = 3;
+
+    /// <summary>
+    /// 把合集内存活的影片数写进合集自己的 CommunityRating。
+    /// 12.x 没有「子项数量」这个排序字段（ItemSortBy 里没有，未知值会静默退回 SortName），
+    /// 而 CommunityRating 是条目级单列、BoxSet 本来用不到、且前端不做 0~10 钳制，
+    /// 所以借它承载片数：库页排序选「公众评分」即按片数排，星星位置显示的数字就是片数。
+    /// 关掉时把写过的值清回 null，不留假评分。
+    /// </summary>
+    public bool EnableCollectionCountRating { get; set; } = false;
 #endif
 
 #if __EMBY__
