@@ -1,4 +1,4 @@
-name: .NET
+name: "发布：插件安装包与仓库目录清单"  # tag v* 或手动触发；产物 = 带两个 zip 的 GitHub Release + dist 分支的 manifest.json
 
 on:
   push:
