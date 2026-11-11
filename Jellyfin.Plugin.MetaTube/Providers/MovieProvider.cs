@@ -40,6 +40,10 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
     private static readonly ConcurrentDictionary<string, Metadata.MovieInfo> _aggregationCache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // 演员身份解析：别名表 → 演员搜索/详情 → 回写；进程级缓存。
+    private static readonly ActorIdentityResolver ActorResolver = new(
+        new ServerActorAliasStore(), new ServerActorDirectory(), new TermActorNameTranslator());
+
 #if __EMBY__
     public MetadataFeatures[] Features => new[]
         { MetadataFeatures.Collections, MetadataFeatures.Adult, MetadataFeatures.RequiredSetup };
@@ -97,14 +101,15 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         if (Configuration.EnableRealActorNames)
             await ConvertToRealActorNames(m, cancellationToken);
 
-        // 去掉「名字（读音）」末尾的读音注解：展示、翻译与演员搜索统一用不带读音的名字。
-        m.Actors = ActorNameHelper.NormalizeAll(m.Actors);
+        // 解析演员身份：拆出显示名/搜索名，查别名表，未命中走演员搜索与详情并回写。
+        // 同一个 pid 的多种写法只保留一位；不同演员译成同名时由解析器回退原名。
+        var resolvedActors = await ActorResolver.ResolveAllAsync(m.Actors, Configuration.TranslateActor,
+            TranslationHelper.TargetLanguage, cancellationToken, message => Logger.Info("{0}", message));
+        m.Actors = resolvedActors.Select(actor => actor.DisplayName).ToArray();
 
-        // Translate movie info. 返回「译名 → 原名」的演员映射：
-        // 演员条目显示译名，但搜索 pid/头像必须用服务端收录的原名。
-        var actorOriginalNames = TranslationHelper.IsEnabled
-            ? await TranslateMovieInfo(m, cancellationToken)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Translate movie info（标题/简介/系列/类别；演员已由解析器处理）。
+        if (TranslationHelper.IsEnabled)
+            await TranslateMovieInfo(m, cancellationToken);
 
         // Distinct and clean blank list
         m.Genres = m.Genres?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray() ?? Array.Empty<string>();
@@ -202,20 +207,18 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
             });
 
         // Add actors.
-        foreach (var name in m.Actors ?? Enumerable.Empty<string>())
+        foreach (var resolvedActor in resolvedActors)
         {
             var actor = new PersonInfo
             {
-                Name = name,
+                Name = resolvedActor.DisplayName,
 #if __EMBY__
                 Type = PersonType.Actor,
 #else
                 Type = PersonKind.Actor,
 #endif
             };
-            // 译名只用于显示；pid 与头像仍按原名搜索（服务端用日文原名收录演员）。
-            var searchName = actorOriginalNames.TryGetValue(name, out var original) ? original : name;
-            await SetActorImageUrl(actor, searchName, cancellationToken);
+            await SetActorImageUrl(actor, resolvedActor, cancellationToken);
             result.AddPerson(actor);
         }
 
@@ -298,53 +301,72 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         return results;
     }
 
-    private async Task SetActorImageUrl(PersonInfo actor, string searchName, CancellationToken cancellationToken)
+    private async Task SetActorImageUrl(PersonInfo actor, ResolvedActor resolved,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var results = await ApiClient.SearchActorAsync(searchName, cancellationToken);
-            if (results?.Any() != true)
-            {
-                Logger.Warn("Actor not found: {0}", searchName);
-                return;
-            }
+            var provider = resolved.Provider;
+            var actorId = resolved.ActorId;
+            var imageUrl = resolved.ImageUrl;
+            string gfriendsUrl = null;
 
-            // Use the first result as the primary actor selection.
-            var firstResult = results.First();
+            // 别名表没给出 pid 时才搜索：搜索同时提供 Gfriends 头像兜底。
+            if (!resolved.HasIdentity)
+            {
+                var results = await ApiClient.SearchActorAsync(resolved.SearchName, cancellationToken);
+                if (results?.Any() != true)
+                {
+                    Logger.Warn("Actor not found: {0}", resolved.SearchName);
+                    return;
+                }
+
+                var firstResult = results.First();
+                provider = firstResult.Provider;
+                actorId = firstResult.Id;
+                if (firstResult.Images?.Any() == true)
+                {
+                    imageUrl = ApiClient.GetPrimaryImageApiUrl(
+                        firstResult.Provider, firstResult.Id, firstResult.Images.First(), 0.5, true);
+                }
+
+                var gfriends = results.FirstOrDefault(result =>
+                    result.Provider == Gfriends && result.Images?.Any() == true);
+                if (gfriends != null)
+                {
+                    gfriendsUrl = ApiClient.GetPrimaryImageApiUrl(
+                        gfriends.Provider, gfriends.Id, gfriends.Images.First(), 0.5, true);
+                }
+            }
 
             // pid 写在有没有照片之外：服务端 SavePeopleMetadataAsync 会把 PersonInfo.ProviderIds
             // 抄进 Person 条目入库（v10.11 LibraryManager.cs:3106-3113、v12.4 :3896-3905），
-            // 那是全库里唯一能持久保存演员 pid 的地方。原先只在有照片时才写，没照片的演员
-            // 落不了 pid，演员合集的封面就解析不到（CollectionImageProvider 只认合集上的 pid）。
-            actor.SetPid(Name, firstResult.Provider, firstResult.Id);
+            // 那是全库里唯一能持久保存演员 pid 的地方。
+            actor.SetPid(Name, provider, actorId);
 
-            // 头像取演员详情接口：搜索结果里的 images 只是匹配项快照，详情才是该演员的主图。
-            // 详情失败不影响 pid 落库，后面的 Gfriends 兜底照常执行。
+            // 头像优先取演员详情接口；失败时保留搜索结果里的图。
             try
             {
-                var actorInfo = await ApiClient.GetActorInfoAsync(firstResult.Provider, firstResult.Id,
-                    cancellationToken);
+                var actorInfo = await ApiClient.GetActorInfoAsync(provider, actorId, cancellationToken);
                 if (actorInfo?.Images?.Any() == true)
                 {
-                    actor.ImageUrl = ApiClient.GetPrimaryImageApiUrl(
+                    imageUrl = ApiClient.GetPrimaryImageApiUrl(
                         actorInfo.Provider, actorInfo.Id, actorInfo.Images.First(), 0.5, true);
                 }
             }
             catch (Exception e)
             {
-                Logger.Warn("Get actor image from actor info failed: {0} ({1})", searchName, e.Message);
+                Logger.Warn("Get actor image from actor info failed: {0} ({1})", resolved.SearchName, e.Message);
             }
 
-            // Use the Gfriends to update the actor profile image, if any.
-            foreach (var result in results.Where(result => result.Provider == Gfriends && result.Images?.Any() == true))
-            {
-                actor.ImageUrl = ApiClient.GetPrimaryImageApiUrl(
-                    result.Provider, result.Id, result.Images.First(), 0.5, true);
-            }
+            if (!string.IsNullOrWhiteSpace(gfriendsUrl))
+                imageUrl = gfriendsUrl;
+            if (!string.IsNullOrWhiteSpace(imageUrl))
+                actor.ImageUrl = imageUrl;
         }
         catch (Exception e)
         {
-            Logger.Error("Get actor image error: {0} ({1})", searchName, e.Message);
+            Logger.Error("Get actor image error: {0} ({1})", resolved.SearchName, e.Message);
         }
     }
 
@@ -409,19 +431,17 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         }
     }
 
-    private async Task<Dictionary<string, string>> TranslateMovieInfo(Metadata.MovieInfo m,
-        CancellationToken cancellationToken)
+    private async Task TranslateMovieInfo(Metadata.MovieInfo m, CancellationToken cancellationToken)
     {
         try
         {
             Logger.Info("Translate movie info: {0} => {1}", m.Number, TranslationHelper.TargetLanguage);
-            return await TranslationHelper.TranslateMovieAsync(m, cancellationToken,
+            await TranslationHelper.TranslateMovieAsync(m, cancellationToken,
                 message => Logger.Info("{0}", message));
         }
         catch (Exception e)
         {
             Logger.Error("Translate error: {0}", e.Message);
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 

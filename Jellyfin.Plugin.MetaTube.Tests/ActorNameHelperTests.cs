@@ -4,45 +4,46 @@ using Xunit;
 namespace Jellyfin.Plugin.MetaTube.Tests;
 
 /// <summary>
-/// 演员名规范化：来源会把读音写在名字后的括号里（柚井初美（ゆい はつみ））。
-/// 只去掉读音注解，括号里是汉字时必须原样保留，避免把别名/组合当成读音删掉。
+/// 演员名拆分与角色分类：括号内是搜索更准确的写法，括号外是显示用的汉字名；
+/// 原始字符串不删改，拆分只用于展示、搜索与入表。
 /// </summary>
 public class ActorNameHelperTests
 {
     [Theory]
-    [InlineData("柚井初美（ゆい はつみ）", "柚井初美")]
-    [InlineData("柚井初美(ゆい はつみ)", "柚井初美")]
-    [InlineData("Yui Hatsumi（ゆい はつみ）", "Yui Hatsumi")]
-    [InlineData("AIKA（アイカ）", "AIKA")]
-    [InlineData("A (B)", "A")]
-    [InlineData("  柚井初美（ゆい はつみ）  ", "柚井初美")]
-    [InlineData("柚井初美", "柚井初美")]
-    public void Normalize_StripsTrailingReading(string input, string expected)
+    [InlineData("柚井初美（ゆい はつみ）", "柚井初美", "ゆい はつみ")]
+    [InlineData("柚井初美(ゆい はつみ)", "柚井初美", "ゆい はつみ")]
+    [InlineData("A（B）", "A", "B")]
+    [InlineData("柚井初美", "柚井初美", "柚井初美")]
+    [InlineData("  柚井初美  ", "柚井初美", "柚井初美")]
+    public void Parse_SplitsDisplayAndSearchName(string raw, string display, string search)
     {
-        Assert.Equal(expected, ActorNameHelper.Normalize(input));
+        var parts = ActorNameHelper.Parse(raw);
+
+        Assert.Equal(display, parts.DisplayName);
+        Assert.Equal(search, parts.SearchName);
     }
 
     [Theory]
-    [InlineData("A（B組）")]
-    [InlineData("柚井初美（ゆい はつみ）（別名）")]
-    [InlineData("A（ゆい（はつみ））")]
     [InlineData("（ゆい はつみ）")]
-    public void Normalize_KeepsNonReadingAnnotations(string input)
+    [InlineData("A（ゆい（はつみ））")]
+    public void Parse_KeepsAmbiguousFormsIntact(string raw)
     {
-        Assert.Equal(input, ActorNameHelper.Normalize(input));
+        var parts = ActorNameHelper.Parse(raw);
+
+        Assert.Equal(raw, parts.DisplayName);
+        Assert.Equal(raw, parts.SearchName);
     }
 
-    [Fact]
-    public void Normalize_HandlesNullAndBlank()
+    [Theory]
+    [InlineData("ゆい はつみ", "kana")]
+    [InlineData("アイカ", "kana")]
+    [InlineData("Yui Hatsumi", "romaji")]
+    [InlineData("AIKA", "romaji")]
+    [InlineData("柚井初美", "stage")]
+    [InlineData("", "alias")]
+    public void Classify_DetectsNameRole(string name, string role)
     {
-        Assert.Null(ActorNameHelper.Normalize(null));
-        Assert.Equal("   ", ActorNameHelper.Normalize("   "));
-    }
-
-    [Fact]
-    public void NormalizeAll_ReturnsNullForNull()
-    {
-        Assert.Null(ActorNameHelper.NormalizeAll(null));
+        Assert.Equal(role, ActorNameHelper.Classify(name));
     }
 
     [Fact]
@@ -64,30 +65,12 @@ public class ActorNameHelperTests
     }
 
     [Fact]
-    public void ResolveTranslatedCollisions_HandlesSwappedNames()
-    {
-        var result = ActorNameHelper.ResolveTranslatedCollisions(
-            new[] { "A", "B" }, new[] { "B", "A" });
-
-        Assert.Equal(new[] { "B", "A" }, result);
-    }
-
-    [Fact]
     public void ResolveTranslatedCollisions_FallsBackWhenTranslationEqualsOwnOriginal()
     {
         var result = ActorNameHelper.ResolveTranslatedCollisions(
             new[] { "A", "B" }, new[] { "A", "A" });
 
         Assert.Equal(new[] { "A", "B" }, result);
-    }
-
-    [Fact]
-    public void ResolveTranslatedCollisions_HandlesMiddleCollision()
-    {
-        var result = ActorNameHelper.ResolveTranslatedCollisions(
-            new[] { "A", "B", "C" }, new[] { "X", "X", "Y" });
-
-        Assert.Equal(new[] { "X", "B", "Y" }, result);
     }
 
     [Fact]

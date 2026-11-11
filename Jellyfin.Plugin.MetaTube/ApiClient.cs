@@ -22,6 +22,7 @@ public static class ApiClient
     private const string BackdropImageApi = "/v1/images/backdrop";
     private const string TranslateApi = "/v1/translate";
     private const string TranslationTermApi = "/v1/translations/term";
+    private const string ActorAliasApi = "/v1/actor-aliases";
     private const string ImageCacheApi = "/v1/images/cache";
     private const string MovieAggregateApi = "/v1/movies/aggregate";
 
@@ -265,6 +266,60 @@ public static class ApiClient
         };
         return await SendTranslationTermRequestAsync(HttpMethod.Put, apiUrl, body, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 查询演员别名表。未命中返回 found=false；同名不同人返回 ambiguous=true。
+    /// </summary>
+    public static async Task<ActorAliasResult> LookupActorAliasAsync(string name, string targetLang,
+        CancellationToken cancellationToken)
+    {
+        var apiUrl = ComposeUrl(ActorAliasApi, new NameValueCollection
+        {
+            { "name", name },
+            { "target_lang", targetLang }
+        });
+        return await SendActorAliasRequestAsync(HttpMethod.Get, apiUrl, null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 按演员来源 pid 回写名字与译名，返回实际生效的身份与名字。
+    /// </summary>
+    public static async Task<ActorAliasResult> SaveActorAliasAsync(ActorAliasRequest body,
+        CancellationToken cancellationToken)
+    {
+        var apiUrl = ComposeUrl(ActorAliasApi, new NameValueCollection());
+        return await SendActorAliasRequestAsync(HttpMethod.Put, apiUrl, body, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<ActorAliasResult> SendActorAliasRequestAsync(HttpMethod method, string apiUrl,
+        ActorAliasRequest body, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var request = CreateRequest(method, apiUrl, true);
+        if (body != null)
+            request.Content = JsonContent.Create(body);
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        // 旧服务端没有这个路由：404 表示不支持别名表，上层降级为直接搜索。
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new ActorAliasApiUnavailableException();
+
+        var apiResponse = (await response.Content!
+            .ReadFromJsonAsync<ResponseInfo<ActorAliasResult>>(cancellationToken: cancellationToken)
+            .ConfigureAwait(false))!;
+
+        if (!response.IsSuccessStatusCode && apiResponse.Error != null)
+            throw new Exception($"API request error: {apiResponse.Error.Code} ({apiResponse.Error.Message})");
+
+        if (apiResponse.Data == null)
+            throw new Exception("Response data field is null");
+
+        return apiResponse.Data;
     }
 
     private static async Task<TranslationTermInfo> SendTranslationTermRequestAsync(HttpMethod method, string apiUrl,

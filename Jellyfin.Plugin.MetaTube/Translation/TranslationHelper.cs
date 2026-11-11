@@ -44,11 +44,10 @@ public static class TranslationHelper
     }
 
     /// <summary>
-    /// 按配置勾选项翻译影片元数据。标题/简介每次直译；系列、类别、片商、厂牌、演员走术语字典。
-    /// 返回「译名 → 原名」的演员映射：PersonInfo 显示译名，但演员搜索（pid 与头像）
-    /// 必须用服务端收录的原名。
+    /// 按配置勾选项翻译影片元数据。标题/简介每次直译；系列、类别走术语字典。
+    /// 演员名由 <see cref="ActorIdentityResolver"/> 单独处理（身份解析 + 翻译）。
     /// </summary>
-    public static async Task<Dictionary<string, string>> TranslateMovieAsync(Metadata.MovieInfo m,
+    public static async Task TranslateMovieAsync(Metadata.MovieInfo m,
         CancellationToken cancellationToken, Action<string> log = null)
     {
         log ??= _ => { };
@@ -75,30 +74,16 @@ public static class TranslationHelper
             m.Genres = genres;
         }
 
-        var actorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (config.TranslateActor && m.Actors?.Any() == true)
-        {
-            var sources = m.Actors;
-            var translatedNames = new string[sources.Length];
-            for (var i = 0; i < sources.Length; i++)
-                translatedNames[i] = await Terms.ResolveAsync(TermKind.Actor, sources[i], cancellationToken, log)
-                    .ConfigureAwait(false);
+    }
 
-            // 两个不同演员译成同一个名字时不能直接合并：后出现的那位保留原名，
-            // 否则 Distinct() 会把它从演职表里抹掉。
-            var effectiveNames = ActorNameHelper.ResolveTranslatedCollisions(sources, translatedNames);
-            for (var i = 0; i < effectiveNames.Length; i++)
-            {
-                if (effectiveNames[i] != translatedNames[i])
-                    log($"Actor name collision, keep original: {sources[i]} ({translatedNames[i]})");
-                if (!string.IsNullOrWhiteSpace(effectiveNames[i]))
-                    actorMap.TryAdd(effectiveNames[i], sources[i]);
-            }
-
-            m.Actors = effectiveNames;
-        }
-
-        return actorMap;
+    /// <summary>
+    /// 演员名翻译入口：走与系列/类别相同的术语字典（同一身份的不同写法最终都以
+    /// 规范名作为键，所以译文稳定）。引擎失败时返回原文，不抛异常。
+    /// </summary>
+    internal static Task<string> TranslateActorNameAsync(string name, CancellationToken cancellationToken,
+        Action<string> log)
+    {
+        return Terms.ResolveAsync(TermKind.Actor, name, cancellationToken, log);
     }
 
     /// <summary>
