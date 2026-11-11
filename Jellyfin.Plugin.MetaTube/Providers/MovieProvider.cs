@@ -315,10 +315,21 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
             // 落不了 pid，演员合集的封面就解析不到（CollectionImageProvider 只认合集上的 pid）。
             actor.SetPid(Name, firstResult.Provider, firstResult.Id);
 
-            if (firstResult.Images?.Any() == true)
+            // 头像取演员详情接口：搜索结果里的 images 只是匹配项快照，详情才是该演员的主图。
+            // 详情失败不影响 pid 落库，后面的 Gfriends 兜底照常执行。
+            try
             {
-                actor.ImageUrl = ApiClient.GetPrimaryImageApiUrl(
-                    firstResult.Provider, firstResult.Id, firstResult.Images.First(), 0.5, true);
+                var actorInfo = await ApiClient.GetActorInfoAsync(firstResult.Provider, firstResult.Id,
+                    cancellationToken);
+                if (actorInfo?.Images?.Any() == true)
+                {
+                    actor.ImageUrl = ApiClient.GetPrimaryImageApiUrl(
+                        actorInfo.Provider, actorInfo.Id, actorInfo.Images.First(), 0.5, true);
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Warn("Get actor image from actor info failed: {0} ({1})", searchName, e.Message);
             }
 
             // Use the Gfriends to update the actor profile image, if any.
