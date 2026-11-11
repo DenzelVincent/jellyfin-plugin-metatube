@@ -91,22 +91,45 @@ public static class JellyfinExtensions
     /// v12.4 BaseItemRepository.TranslateQuery.cs:461）而不用 PersonIds：后者要先有一条同名同写法的
     /// Person 条目（它内部还是按 BaseItems.Name→Peoples.Name 联表），条目缺失时静默返回空集。
     /// 名字必须是库里的原始写法（ActorGroup.CreditNames），这里比较是二进制精确的，规范化过就查不到。
+    /// libraryScope 非空时只查这些媒体库：否则白名单外库里的同名演员影片会被当成成员重新加回合集。
     /// </summary>
-    public static HashSet<Guid> GetActorMovieIds(this ILibraryManager manager, IEnumerable<string> creditNames)
+    public static HashSet<Guid> GetActorMovieIds(this ILibraryManager manager, IEnumerable<string> creditNames,
+        IReadOnlyCollection<Guid> libraryScope = null)
     {
+        var scope = libraryScope is { Count: > 0 } ? libraryScope.ToArray() : null;
         var ids = new HashSet<Guid>();
         foreach (var name in creditNames.Where(n => !string.IsNullOrEmpty(n)))
         {
-            foreach (var item in manager.GetItemList(new InternalItemsQuery
-                     {
-                         Person = name,
-                         MediaTypes = new[] { MediaType.Video },
-                         IncludeItemTypes = new[] { BaseItemKind.Movie }
-                     }))
+            var query = new InternalItemsQuery
+            {
+                Person = name,
+                MediaTypes = new[] { MediaType.Video },
+                IncludeItemTypes = new[] { BaseItemKind.Movie }
+            };
+            // 白名单下推给 DB：按演员取全量成员与本次扫描必须同一口径。
+            if (scope is not null)
+                query.AncestorIds = scope;
+
+            foreach (var item in manager.GetItemList(query))
                 ids.Add(item.Id);
         }
 
         return ids;
+    }
+
+    /// <summary>
+    /// 影片是否落在演员合集的媒体库白名单内。空范围 = 全部库（保持旧行为）。
+    /// GetCollectionFolders 是服务端判断「条目属于哪个媒体库」的标准入口，
+    /// 链接条目可能同时属于多个库，任一所属库命中即视为在范围内。
+    /// </summary>
+    public static bool IsInActorCollectionScope(this ILibraryManager manager, BaseItem item,
+        IReadOnlyCollection<Guid> libraryScope)
+    {
+        if (libraryScope is null || libraryScope.Count == 0)
+            return true;
+
+        return ActorCollectionScope.Includes(libraryScope,
+            manager.GetCollectionFolders(item).Select(folder => folder.Id));
     }
 
     /// <summary>

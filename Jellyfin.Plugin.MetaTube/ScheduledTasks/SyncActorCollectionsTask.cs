@@ -69,20 +69,44 @@ public class SyncActorCollectionsTask : IScheduledTask
             minMovieCount = 1;
         }
 
+        // 空范围 = 全部库，旧行为不变；非空时它既是扫描范围，也是按演员反查成员的范围。
+        var libraryScope = ActorCollectionScope.ParseLibraryIds(config.ActorCollectionLibraryIds);
+
         progress?.Report(0);
 
         // 查询条件与 OrganizeMetadataTask 一致：只处理本插件刮出来的影片。
         // 库里历史数据的 provider key 有 "MetaTube"/"metatube" 两种写法，数据库查询大小写敏感，
         // 所以过滤条件必须把两种写法都带上；不能只查一种，也不能靠内存过滤（GetItemList 可能只返回子集）。
-        var movies = _libraryManager.GetItemList(new InternalItemsQuery
+        var movieQuery = new InternalItemsQuery
         {
             MediaTypes = new[] { MediaType.Video },
             IncludeItemTypes = new[] { BaseItemKind.Movie },
             HasAnyProviderId = JellyfinExtensions.BuildMetaTubeProviderFilter()
-        }).ToList();
+        };
 
-        // 成员对齐的作用域：只有本次扫到的影片能被移出合集。
-        var scopedIds = new HashSet<Guid>(movies.Select(m => m.Id));
+        List<BaseItem> movies;
+        HashSet<Guid> allMetaTubeIds;
+        if (libraryScope.Length == 0)
+        {
+            // 空范围不额外发一次只取 id 的查询，保持旧路径。
+            movies = _libraryManager.GetItemList(movieQuery).ToList();
+            allMetaTubeIds = movies.Select(m => m.Id).ToHashSet();
+        }
+        else
+        {
+            // 范围外的影片不参与分组，但必须留在移除作用域里：
+            // 把某个库从白名单摘掉后，它的旧成员要靠这次扫描才删得掉。
+            allMetaTubeIds = _libraryManager.GetItemIds(movieQuery).ToHashSet();
+            movieQuery.AncestorIds = libraryScope;
+            movies = _libraryManager.GetItemList(movieQuery).ToList();
+        }
+
+        // 成员对齐的作用域：只有本次扫到的 MetaTube 影片能被移出合集。
+        var scopedIds = allMetaTubeIds;
+        var inScopeIds = movies.Select(m => m.Id).ToHashSet();
+        if (libraryScope.Length > 0)
+            _logger.Info("Actor collection library scope: {0} library(ies), {1} movie(s) in scope, {2} out of scope",
+                libraryScope.Length, inScopeIds.Count, allMetaTubeIds.Count - inScopeIds.Count);
 
         var refs = new List<ActorCollectionSync.ActorRef>();
         var noActorIds = new List<Guid>();
@@ -102,6 +126,12 @@ public class SyncActorCollectionsTask : IScheduledTask
 
             refs.AddRange(actors.Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
+
+        // 无演员合集的移除作用域：本批有演员的影片 + 白名单外的影片。
+        // 后者即使本轮不参与分组，也要能从旧合集里清掉；手工加入的非 MetaTube 条目仍不在作用域内。
+        var noActorRemoveScope = new HashSet<Guid>(withActorIds);
+        if (libraryScope.Length > 0)
+            noActorRemoveScope.UnionWith(allMetaTubeIds.Where(id => !inScopeIds.Contains(id)));
 
         var groups = ActorCollectionSync.Build(refs);
         // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
@@ -124,7 +154,7 @@ public class SyncActorCollectionsTask : IScheduledTask
                 // 成员按演职表取全量：本次扫描只覆盖带 MetaTube pid 的影片，按它算成员会漏片
                 // （演员页能看到 4 部、合集里只有 1 部即由此而来）。一条都没查到时保持本次扫描的结果，
                 // 那是演职名写法与库里登记不一致时唯一的依据；移除范围仍限在 scopedIds 内，不会清空合集。
-                var credited = _libraryManager.GetActorMovieIds(group.CreditNames);
+                var credited = _libraryManager.GetActorMovieIds(group.CreditNames, libraryScope);
                 if (credited.Count > 0)
                     group.MovieIds.UnionWith(credited);
 
@@ -158,9 +188,10 @@ public class SyncActorCollectionsTask : IScheduledTask
         // 无演员影片单独归集；withActorIds 只用于移出，不碰手工加入的非 MetaTube 条目。
         try
         {
-            await NoActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, noActorIds, withActorIds,
+            await NoActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, noActorIds, noActorRemoveScope,
                 collections, _logger, cancellationToken).ConfigureAwait(false);
-            _logger.Debug("No-actor movies: {0}, with actors: {1}", noActorIds.Count, withActorIds.Count);
+            _logger.Debug("No-actor movies: {0}, removal scope: {1} (with actors: {2})", noActorIds.Count,
+                noActorRemoveScope.Count, withActorIds.Count);
         }
         catch (Exception e)
         {

@@ -394,8 +394,8 @@ public class ActorCollectionSyncTests
     }
 
     [Fact]
-    // 只增补目标影片、只移除「现在有演员」的成员；手工加入且不在移除作用域的条目不动。
-    public void PlanNoActorCollection_AddsAndRemovesOnlyWithinWithActorScope()
+    // 只增补目标影片、只移除移除作用域内的成员；手工加入且不在作用域的条目不动。
+    public void PlanNoActorCollection_AddsAndRemovesOnlyWithinRemoveScope()
     {
         var existing = Existing(D, "无演员影片", memberIds: new[] { A, B, C });
 

@@ -329,16 +329,17 @@ public static class ActorCollectionSync
 
     /// <summary>
     /// 计算「无演员影片」合集的增删。
-    /// noActorMovieIds 是要收进合集的影片；withActorMovieIds 是移除作用域，
-    /// 只移除「现在有演员」且确实在合集里的影片，手工加入的非 MetaTube 条目不在作用域内。
+    /// noActorMovieIds 是要收进合集的影片；removeScopeMovieIds 是移除作用域，
+    /// 只移除「现在有演员」或「被白名单排除」且确实在合集里的影片，
+    /// 手工加入的非 MetaTube 条目不在作用域内。
     /// </summary>
     public static NoActorCollectionPlan PlanNoActorCollection(
         IReadOnlyCollection<Guid> noActorMovieIds,
-        IReadOnlyCollection<Guid> withActorMovieIds,
+        IReadOnlyCollection<Guid> removeScopeMovieIds,
         ExistingCollection existing)
     {
         var target = new HashSet<Guid>(noActorMovieIds ?? Array.Empty<Guid>());
-        var removeScope = new HashSet<Guid>(withActorMovieIds ?? Array.Empty<Guid>());
+        var removeScope = new HashSet<Guid>(removeScopeMovieIds ?? Array.Empty<Guid>());
 
         if (existing is null)
         {

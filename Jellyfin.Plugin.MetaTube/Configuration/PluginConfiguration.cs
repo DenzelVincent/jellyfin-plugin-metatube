@@ -53,6 +53,13 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableActorCollections { get; set; } = false;
 
     /// <summary>
+    /// 演员合集的媒体库白名单（库 Guid 字符串）。空表示全部媒体库，保持旧行为。
+    /// 只影响演员合集与「无演员影片」合集的成员范围：范围外的 MetaTube 影片会从已有合集移除，
+    /// 范围外的新影片不再被收进来；刮削本身不受影响。
+    /// </summary>
+    public List<string> ActorCollectionLibraryIds { get; set; } = new();
+
+    /// <summary>
     /// 最小片数阈值，默认 3，设为 1 即每位演员都建。
     /// 只门控「新建」：跌破阈值不回收已有合集，已存在的合集继续对齐成员（设计 D12）。
     /// </summary>

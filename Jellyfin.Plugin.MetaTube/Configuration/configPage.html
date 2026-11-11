@@ -51,6 +51,12 @@
                     </div>
 
                     <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused">Actor collection libraries:</label>
+                        <div class="fieldDescription">No selection means all libraries. Only movies from selected libraries are added to actor collections; MetaTube movies outside the selection are removed from existing actor collections and the no-actor collection. (Jellyfin only)</div>
+                        <div id="actorCollectionLibraries" style="margin-top: 1em; max-height: 20em; overflow-y: auto;"></div>
+                    </div>
+
+                    <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="txtActorCollectionMinMovieCount">Actor collection minimum movies:</label>
                         <input id="txtActorCollectionMinMovieCount" is="emby-input" min="1" name="txtActorCollectionMinMovieCount" step="1" type="number"/>
                         <div class="fieldDescription">Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)</div>
@@ -434,6 +440,58 @@
             }
         });
 
+        var actorLibrariesLoaded = false;
+
+        function renderActorCollectionLibraries(page, selectedIds) {
+            actorLibrariesLoaded = false;
+            var container = page.querySelector('#actorCollectionLibraries');
+            container.innerHTML = '';
+
+            var selected = {};
+            (selectedIds || []).forEach(function (id) {
+                selected[String(id).toLowerCase()] = true;
+            });
+
+            ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders')).then(function (folders) {
+                (folders || []).forEach(function (folder) {
+                    // 「合集」本身不是内容库，勾选它没有意义。
+                    if (folder.CollectionType === 'boxsets') {
+                        return;
+                    }
+
+                    var row = document.createElement('div');
+                    row.className = 'checkboxContainer';
+
+                    var label = document.createElement('label');
+                    label.className = 'emby-checkbox-label';
+
+                    // 定制内置元素必须在创建时带上 is；事后 setAttribute 不会触发升级。
+                    var input = document.createElement('input', { is: 'emby-checkbox' });
+                    input.type = 'checkbox';
+                    input.setAttribute('is', 'emby-checkbox');
+                    input.className = 'actorCollectionLibrary';
+                    input.setAttribute('data-id', folder.ItemId);
+                    input.checked = !!selected[String(folder.ItemId).toLowerCase()];
+
+                    var span = document.createElement('span');
+                    span.textContent = folder.Name;
+
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    row.appendChild(label);
+                    container.appendChild(row);
+                });
+                actorLibrariesLoaded = true;
+            }).catch(function () {
+                // 加载失败不能当成「一个库都没选」：submit 按这个标记决定是否改配置。
+                var message = document.createElement('div');
+                message.className = 'fieldDescription';
+                message.textContent = (window.MetaTubeZhCN && window.MetaTubeZhCN['Failed to load libraries; the current selection is kept.'])
+                    || 'Failed to load libraries; the current selection is kept.';
+                container.appendChild(message);
+            });
+        }
+
         $('.MetaTubeConfigurationPage').on('pageshow', function () {
             Dashboard.showLoadingMsg();
             var page = this;
@@ -442,6 +500,7 @@
                 $('#txtToken', page).val(config.Token).change();
                 page.querySelector('#chkEnableCollections').checked = config.EnableCollections;
                 page.querySelector('#chkEnableActorCollections').checked = config.EnableActorCollections;
+                renderActorCollectionLibraries(page, config.ActorCollectionLibraryIds || []);
                 $('#txtActorCollectionMinMovieCount', page).val(config.ActorCollectionMinMovieCount).change();
                 page.querySelector('#chkEnableCollectionCountRating').checked = config.EnableCollectionCountRating;
                 page.querySelector('#chkEnableDirectors').checked = config.EnableDirectors;
@@ -497,6 +556,13 @@
                 config.Token = $('#txtToken', form).val();
                 config.EnableCollections = $('#chkEnableCollections', form).prop('checked');
                 config.EnableActorCollections = $('#chkEnableActorCollections', form).prop('checked');
+                if (actorLibrariesLoaded) {
+                    config.ActorCollectionLibraryIds = Array.prototype.map.call(
+                        form.querySelectorAll('.actorCollectionLibrary:checked'),
+                        function (input) {
+                            return input.getAttribute('data-id');
+                        });
+                }
                 var actorMin = parseInt($('#txtActorCollectionMinMovieCount', form).val(), 10);
                 config.ActorCollectionMinMovieCount = isNaN(actorMin) ? 3 : Math.max(1, actorMin);
                 config.EnableCollectionCountRating = $('#chkEnableCollectionCountRating', form).prop('checked');
@@ -570,6 +636,9 @@
                 "Automatically create collections by series.": "按系列自动创建合集。",
                 "Enable actor collections": "启用演员合集",
                 "Create one collection per actor from MetaTube metadata. Maintained by the \"同步演员合集\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
+                "Actor collection libraries:": "演员合集媒体库：",
+                "No selection means all libraries. Only movies from selected libraries are added to actor collections; MetaTube movies outside the selection are removed from existing actor collections and the no-actor collection. (Jellyfin only)": "不勾选表示全部媒体库。只把勾选媒体库中的影片收进演员合集；范围外的 MetaTube 影片会从已有演员合集和「无演员影片」合集中移除。（仅 Jellyfin）",
+                "Failed to load libraries; the current selection is kept.": "媒体库列表加载失败；保存时会保留现有选择。",
                 "Actor collection minimum movies:": "演员合集最小影片数：",
                 "Gates creation only: an actor needs at least this many movies to get a new collection, existing collections keep syncing even below the threshold. Set 1 to create one for every actor. Blank falls back to 3. (default: 3)": "只门控新建：演员至少要有这么多部影片才会新建合集；已存在的合集即使跌破也继续对齐成员。设为 1 即每位演员都建；留空按默认 3 处理。（默认：3）",
                 "Sort collections by movie count": "按片数排序合集",
@@ -662,6 +731,9 @@
                 "One record per line, separated by equal signs. Leave the target genre blank to delete the source genre.": "每行一条记录，用等号分隔；等号右侧留空表示删除该类别。",
                 "Save": "保存"
             };
+
+            // 动态节点（媒体库加载失败提示）拿不到首次扫描的翻译，这里留一份给页面脚本用。
+            window.MetaTubeZhCN = zhCN;
 
             function localize() {
                 document.documentElement.lang = "zh-CN";

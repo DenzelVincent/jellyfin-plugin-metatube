@@ -18,11 +18,12 @@ public static class NoActorCollectionSync
     public const string CollectionName = "无演员影片";
 
     /// <summary>
-    /// 对齐合集：noActorMovieIds 要收进去，withActorMovieIds 是移除作用域。
+    /// 对齐合集：noActorMovieIds 要收进去，removeScopeMovieIds 是移除作用域。
+    /// 作用域由调用方给全：现在有演员的影片与白名单外的影片都算，手工加入的非 MetaTube 条目不在范围内。
     /// 合集不存在时只在确实有目标影片时才创建；没有目标且合集也不存在时什么都不做。
     /// </summary>
     public static async Task SyncAsync(ILibraryManager libraryManager, ICollectionManager collectionManager,
-        IReadOnlyCollection<Guid> noActorMovieIds, IReadOnlyCollection<Guid> withActorMovieIds,
+        IReadOnlyCollection<Guid> noActorMovieIds, IReadOnlyCollection<Guid> removeScopeMovieIds,
         IReadOnlyList<ActorCollectionSync.ExistingCollection> collections, ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -30,7 +31,7 @@ public static class NoActorCollectionSync
             string.Equals((collection.Name ?? string.Empty).Trim(), CollectionName,
                 StringComparison.OrdinalIgnoreCase));
 
-        var plan = ActorCollectionSync.PlanNoActorCollection(noActorMovieIds, withActorMovieIds, existing);
+        var plan = ActorCollectionSync.PlanNoActorCollection(noActorMovieIds, removeScopeMovieIds, existing);
 
         if (plan.Create)
         {

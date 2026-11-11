@@ -295,6 +295,9 @@ public sealed class CollectionWatcher : IHostedService
         if (minMovieCount < 1)
             minMovieCount = 1;
 
+        // 白名单外的影片不参与增量同步；它们的旧成员由每日任务统一清出。
+        var libraryScope = ActorCollectionScope.ParseLibraryIds(config.ActorCollectionLibraryIds);
+
         var refs = new List<ActorCollectionSync.ActorRef>();
         var scopedIds = new HashSet<Guid>();
         var noActorIds = new List<Guid>();
@@ -306,6 +309,9 @@ public sealed class CollectionWatcher : IHostedService
 
             // 事件到落库之间影片可能被删或重新识别；与计划任务同口径再筛一次。
             if (!movie.HasMetaTubePid())
+                continue;
+
+            if (!_libraryManager.IsInActorCollectionScope(movie, libraryScope))
                 continue;
 
             scopedIds.Add(movie.Id);
@@ -350,7 +356,7 @@ public sealed class CollectionWatcher : IHostedService
             {
                 // 成员仍取该演员在库里的全部参演影片：新片入库时能一次补齐，
                 // 也避免「只看本批影片」导致新建合集时误判阈值。
-                var credited = _libraryManager.GetActorMovieIds(group.CreditNames);
+                var credited = _libraryManager.GetActorMovieIds(group.CreditNames, libraryScope);
                 if (credited.Count > 0)
                     group.MovieIds.UnionWith(credited);
 
