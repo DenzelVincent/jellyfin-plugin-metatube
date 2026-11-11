@@ -50,6 +50,14 @@
                         <div class="fieldDescription checkboxFieldDescription">Create one collection per actor from MetaTube metadata. Maintained by the "同步演员合集" scheduled task (Jellyfin only).</div>
                     </div>
 
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnableMultiActorCollection" is="emby-checkbox" name="chkEnableMultiActorCollection" type="checkbox"/>
+                            <span>Enable multi-actor collection</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Movies with more than two actors go to a single "多人共演" collection and are excluded from individual actor collections. Requires actor collections. (Jellyfin only, default: off)</div>
+                    </div>
+
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused">Actor collection libraries:</label>
                         <div class="fieldDescription">No selection means all libraries. Only movies from selected libraries are added to actor collections; MetaTube movies outside the selection are removed from existing actor collections and the no-actor collection. (Jellyfin only)</div>
@@ -474,6 +482,7 @@
                 $('#txtToken', page).val(config.Token).change();
                 page.querySelector('#chkEnableCollections').checked = config.EnableCollections;
                 page.querySelector('#chkEnableActorCollections').checked = config.EnableActorCollections;
+                page.querySelector('#chkEnableMultiActorCollection').checked = config.EnableMultiActorCollection;
                 renderActorCollectionLibraries(page, config.ActorCollectionLibraryIds || []);
                 $('#txtActorCollectionMinMovieCount', page).val(config.ActorCollectionMinMovieCount).change();
                 page.querySelector('#chkEnableCollectionCountRating').checked = config.EnableCollectionCountRating;
@@ -526,6 +535,7 @@
                 config.Token = $('#txtToken', form).val();
                 config.EnableCollections = $('#chkEnableCollections', form).prop('checked');
                 config.EnableActorCollections = $('#chkEnableActorCollections', form).prop('checked');
+                config.EnableMultiActorCollection = $('#chkEnableMultiActorCollection', form).prop('checked');
                 if (actorLibrariesLoaded) {
                     config.ActorCollectionLibraryIds = Array.prototype.map.call(
                         form.querySelectorAll('.actorCollectionLibrary:checked'),
@@ -601,6 +611,8 @@
                 "Automatically create collections by series.": "按系列自动创建合集。",
                 "Enable actor collections": "启用演员合集",
                 "Create one collection per actor from MetaTube metadata. Maintained by the \"同步演员合集\" scheduled task (Jellyfin only).": "按 MetaTube 元数据里的演员，每位演员建一个合集。由「同步演员合集」计划任务维护（仅 Jellyfin）。",
+                "Enable multi-actor collection": "启用多人共演合集",
+                "Movies with more than two actors go to a single \"多人共演\" collection and are excluded from individual actor collections. Requires actor collections. (Jellyfin only, default: off)": "演员数超过 2 位的影片统一归入「多人共演」合集，不再加入普通演员合集。需要先启用演员合集。（仅 Jellyfin，默认关闭）",
                 "Actor collection libraries:": "演员合集媒体库：",
                 "No selection means all libraries. Only movies from selected libraries are added to actor collections; MetaTube movies outside the selection are removed from existing actor collections and the no-actor collection. (Jellyfin only)": "不勾选表示全部媒体库。只把勾选媒体库中的影片收进演员合集；范围外的 MetaTube 影片会从已有演员合集和「无演员影片」合集中移除。（仅 Jellyfin）",
                 "Failed to load libraries; the current selection is kept.": "媒体库列表加载失败；保存时会保留现有选择。",

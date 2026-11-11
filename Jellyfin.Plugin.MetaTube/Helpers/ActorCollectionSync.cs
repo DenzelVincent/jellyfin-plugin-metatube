@@ -109,6 +109,25 @@ public static class ActorCollectionSync
         return (name ?? string.Empty).Trim().ToLowerInvariant();
     }
 
+    /// <summary>「多人共演」阈值：演员数超过这个值（即 3 位及以上）归入多人共演合集。</summary>
+    public const int MultiActorThreshold = 2;
+
+    /// <summary>按去重后的非空演员名判断是否属于多人共演。</summary>
+    public static bool IsMultiActor(IEnumerable<string> actorNames)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in actorNames ?? Enumerable.Empty<string>())
+        {
+            var trimmed = name?.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                continue;
+            seen.Add(trimmed);
+            if (seen.Count > MultiActorThreshold)
+                return true;
+        }
+        return false;
+    }
+
     public static Dictionary<string, ActorGroup> Build(IEnumerable<ActorRef> refs)
     {
         var groups = new Dictionary<string, ActorGroup>();

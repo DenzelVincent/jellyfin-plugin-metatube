@@ -302,6 +302,7 @@ public sealed class CollectionWatcher : IHostedService
         var scopedIds = new HashSet<Guid>();
         var noActorIds = new List<Guid>();
         var withActorIds = new List<Guid>();
+        var multiActorIds = new List<Guid>();
         foreach (var movieId in movieIds)
         {
             if (_libraryManager.GetItemById(movieId) is not Movie movie)
@@ -316,10 +317,22 @@ public sealed class CollectionWatcher : IHostedService
 
             scopedIds.Add(movie.Id);
             var actors = _libraryManager.GetActors(movie);
-            if (actors.Any(actor => !string.IsNullOrWhiteSpace(actor.Name)))
-                withActorIds.Add(movie.Id);
-            else
+            var actorNames = actors.Select(actor => actor.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .ToList();
+            if (actorNames.Count == 0)
+            {
                 noActorIds.Add(movie.Id);
+                continue;
+            }
+
+            withActorIds.Add(movie.Id);
+            // 多人共演只进专门合集；从普通演员合集移除交给每日任务（增量只处理本批演员）。
+            if (config.EnableMultiActorCollection && ActorCollectionSync.IsMultiActor(actorNames))
+            {
+                multiActorIds.Add(movie.Id);
+                continue;
+            }
 
             refs.AddRange(actors.Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
@@ -339,6 +352,20 @@ public sealed class CollectionWatcher : IHostedService
         catch (Exception e)
         {
             _logger.LogWarning("Sync no-actor collection after movie update failed: {0}", e.Message);
+        }
+
+        // 多人共演：单片刷新后即时加入/移出；移除范围只限本批影片。
+        if (config.EnableMultiActorCollection)
+        {
+            try
+            {
+                await MultiActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, multiActorIds, scopedIds,
+                    collections, _logger, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning("Sync multi-actor collection after movie update failed: {0}", e.Message);
+            }
         }
 
         var groups = ActorCollectionSync.Build(refs);

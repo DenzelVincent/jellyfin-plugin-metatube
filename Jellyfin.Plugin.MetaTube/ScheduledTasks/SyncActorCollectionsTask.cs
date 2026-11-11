@@ -111,6 +111,7 @@ public class SyncActorCollectionsTask : IScheduledTask
         var refs = new List<ActorCollectionSync.ActorRef>();
         var noActorIds = new List<Guid>();
         var withActorIds = new List<Guid>();
+        var multiActorIds = new List<Guid>();
         foreach (var (idx, movie) in movies.WithIndex())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -119,10 +120,22 @@ public class SyncActorCollectionsTask : IScheduledTask
             // 本次扫描只用来回答「库里出现了哪些演员」。演职行不带演员 pid（服务端只回读
             // Id/Name/Role/SortOrder/Type），成员和 pid 都另按演员查，见下面按演员的循环。
             var actors = _libraryManager.GetActors(movie);
-            if (actors.Any(actor => !string.IsNullOrWhiteSpace(actor.Name)))
-                withActorIds.Add(movie.Id);
-            else
+            var actorNames = actors.Select(actor => actor.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .ToList();
+            if (actorNames.Count == 0)
+            {
                 noActorIds.Add(movie.Id);
+                continue;
+            }
+
+            withActorIds.Add(movie.Id);
+            // 多人共演只进专门合集，不再进入普通演员合集；移除范围仍包含它，旧成员会被清出。
+            if (config.EnableMultiActorCollection && ActorCollectionSync.IsMultiActor(actorNames))
+            {
+                multiActorIds.Add(movie.Id);
+                continue;
+            }
 
             refs.AddRange(actors.Select(actor => new ActorCollectionSync.ActorRef(movie.Id, actor.Name)));
         }
@@ -196,6 +209,22 @@ public class SyncActorCollectionsTask : IScheduledTask
         catch (Exception e)
         {
             _logger.Error("Sync no-actor collection error: {0}", e.Message);
+        }
+
+        // 多人共演合集：只收本次扫描范围内、演员数超过阈值的 MetaTube 影片；
+        // 移除范围是本次扫到的全部 MetaTube 影片，降到 2 人及以下的会被移出。
+        if (config.EnableMultiActorCollection)
+        {
+            try
+            {
+                await MultiActorCollectionSync.SyncAsync(_libraryManager, _collectionManager, multiActorIds, scopedIds,
+                    collections, _logger, cancellationToken).ConfigureAwait(false);
+                _logger.Debug("Multi-actor movies: {0}", multiActorIds.Count);
+            }
+            catch (Exception e)
+            {
+                _logger.Error("Sync multi-actor collection error: {0}", e.Message);
+            }
         }
 
         // 空合集清理：即时清理交给 CollectionWatcher 的事件监听，这里兜住「停机期间删了影片」的情况。

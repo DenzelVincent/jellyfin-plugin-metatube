@@ -52,6 +52,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableActorCollections { get; set; } = false;
 
     /// <summary>
+    /// 多人共演合集开关：演员数超过 2 位的 MetaTube 影片单独归入「多人共演」，
+    /// 不再进入普通演员合集。默认关闭；只影响插件维护的合集。
+    /// </summary>
+    public bool EnableMultiActorCollection { get; set; } = false;
+
+    /// <summary>
     /// 演员合集的媒体库白名单（库 Guid 字符串）。空表示全部媒体库，保持旧行为。
     /// 只影响演员合集与「无演员影片」合集的成员范围：范围外的 MetaTube 影片会从已有合集移除，
     /// 范围外的新影片不再被收进来；刮削本身不受影响。

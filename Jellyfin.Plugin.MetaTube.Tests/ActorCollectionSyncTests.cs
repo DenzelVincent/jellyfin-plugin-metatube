@@ -434,4 +434,24 @@ public class ActorCollectionSyncTests
     {
         Assert.Equal(ActorCollectionSync.CoverAction.FetchGalleryImage, ActorCollectionSync.PlanCover(false, false));
     }
+
+    [Fact]
+    public void IsMultiActor_TrueForMoreThanTwoDistinctActors()
+    {
+        Assert.True(ActorCollectionSync.IsMultiActor(new[] { "甲", "乙", "丙" }));
+    }
+
+    [Fact]
+    public void IsMultiActor_FalseForTwoActors()
+    {
+        Assert.False(ActorCollectionSync.IsMultiActor(new[] { "甲", "乙" }));
+    }
+
+    [Fact]
+    public void IsMultiActor_IgnoresDuplicateAndBlankNames()
+    {
+        Assert.False(ActorCollectionSync.IsMultiActor(new[] { "甲", "甲", " " }));
+        Assert.True(ActorCollectionSync.IsMultiActor(new[] { "甲", "乙", "乙", "丙" }));
+    }
+
 }
