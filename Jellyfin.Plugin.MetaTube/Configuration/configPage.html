@@ -454,7 +454,10 @@
                     label.className = 'emby-checkbox-label';
 
                     // 定制内置元素必须在创建时带上 is；事后 setAttribute 不会触发升级。
-                    var input = document.createElement('input', { is: 'emby-checkbox' });
+                    // Jellyfin 的 emby-checkbox 由 webcomponents-lite(v0) 注册，它替换的
+                    // document.createElement 只认字符串 typeExtension；传 { is: ... } 对象会在
+                    // 内部 typeExtension.toLowerCase() 抛 TypeError，整段渲染被当成加载失败。
+                    var input = document.createElement('input', 'emby-checkbox');
                     input.type = 'checkbox';
                     input.setAttribute('is', 'emby-checkbox');
                     input.className = 'actorCollectionLibrary';
@@ -470,7 +473,11 @@
                     container.appendChild(row);
                 });
                 actorLibrariesLoaded = true;
-            }).catch(function () {
+            }).catch(function (error) {
+                // 请求失败和渲染异常都会进这里，打印出来才能区分是接口问题还是页面问题。
+                if (window.console) {
+                    console.error('Failed to load actor collection libraries', error);
+                }
                 // 加载失败不能当成「一个库都没选」：submit 按这个标记决定是否改配置。
                 var message = document.createElement('div');
                 message.className = 'fieldDescription';
