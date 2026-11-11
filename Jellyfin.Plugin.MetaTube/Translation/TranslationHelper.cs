@@ -8,8 +8,10 @@ namespace Jellyfin.Plugin.MetaTube.Translation;
 
 public static class TranslationHelper
 {
+    /// <summary>目标语言固定为简体中文，配置页不再提供语言选择。</summary>
+    public const string TargetLanguage = "zh-CN";
+
     private const string AutoLanguageCode = "auto";
-    private const string JapaneseLanguageCode = "ja";
 
     /// <summary>
     /// Maximum characters sent to the free Google endpoint in a single request.
@@ -25,119 +27,103 @@ public static class TranslationHelper
 
     private static readonly SemaphoreSlim Semaphore = new(1);
 
+    // 进程级术语服务：同一演员/系列/类别在一次进程生命周期内只查一次库、只翻一次。
+    private static readonly TermTranslationService Terms = new(new ServerTermStore(), new EngineTextTranslator());
+
     private static PluginConfiguration Configuration => Plugin.Instance.Configuration;
 
-    public static async Task TranslateAsync(MovieInfo m, string to, CancellationToken cancellationToken,
-        Action<string> log = null)
+    /// <summary>7 个翻译项任一勾选即启用翻译；全不勾时完全不触碰元数据。</summary>
+    public static bool IsEnabled
     {
-        if (string.Equals(to, JapaneseLanguageCode, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"language not allowed: {to}");
+        get
+        {
+            var config = Configuration;
+            return config.TranslateTitle || config.TranslateSummary || config.TranslateSeries ||
+                   config.TranslateGenre || config.TranslateActor || config.TranslateMaker ||
+                   config.TranslateLabel;
+        }
+    }
 
+    /// <summary>
+    /// 按配置勾选项翻译影片元数据。标题/简介每次直译；系列、类别、片商、厂牌、演员走术语字典。
+    /// 返回「译名 → 原名」的演员映射：PersonInfo 显示译名，但演员搜索（pid 与头像）
+    /// 必须用服务端收录的原名。
+    /// </summary>
+    public static async Task<Dictionary<string, string>> TranslateMovieAsync(Metadata.MovieInfo m,
+        CancellationToken cancellationToken, Action<string> log = null)
+    {
         log ??= _ => { };
+        var config = Configuration;
 
         await LogResolvedModelAsync(cancellationToken, log).ConfigureAwait(false);
 
-        if (Configuration.TranslationMode.HasFlag(TranslationMode.Title) &&
-            !string.IsNullOrWhiteSpace(m.Title) && !ShouldSkipTranslation(m.Title, to))
-            m.Title = await TranslateFieldSafeAsync(m.Title, to, cancellationToken, log).ConfigureAwait(false);
+        if (config.TranslateTitle && !string.IsNullOrWhiteSpace(m.Title))
+            m.Title = await TranslateFieldSafeAsync(m.Title, cancellationToken, log).ConfigureAwait(false);
 
-        if (Configuration.TranslationMode.HasFlag(TranslationMode.Summary) &&
-            !string.IsNullOrWhiteSpace(m.Summary) && !ShouldSkipTranslation(m.Summary, to))
-            m.Summary = await TranslateFieldSafeAsync(m.Summary, to, cancellationToken, log).ConfigureAwait(false);
+        if (config.TranslateSummary && !string.IsNullOrWhiteSpace(m.Summary))
+            m.Summary = await TranslateFieldSafeAsync(m.Summary, cancellationToken, log).ConfigureAwait(false);
 
-        if (Configuration.EnableSeriesTranslation &&
-            !string.IsNullOrWhiteSpace(m.Series))
-            m.Series = await TranslateSeriesAsync(m.Series, to, cancellationToken, log).ConfigureAwait(false);
+        if (config.TranslateSeries && !string.IsNullOrWhiteSpace(m.Series))
+            m.Series = await Terms.ResolveAsync(TermKind.Series, m.Series, cancellationToken, log)
+                .ConfigureAwait(false);
+
+        if (config.TranslateMaker && !string.IsNullOrWhiteSpace(m.Maker))
+            m.Maker = await Terms.ResolveAsync(TermKind.Maker, m.Maker, cancellationToken, log)
+                .ConfigureAwait(false);
+
+        if (config.TranslateLabel && !string.IsNullOrWhiteSpace(m.Label))
+            m.Label = await Terms.ResolveAsync(TermKind.Label, m.Label, cancellationToken, log)
+                .ConfigureAwait(false);
+
+        if (config.TranslateGenre && m.Genres?.Any() == true)
+        {
+            var genres = new string[m.Genres.Length];
+            for (var i = 0; i < m.Genres.Length; i++)
+                genres[i] = await Terms.ResolveAsync(TermKind.Genre, m.Genres[i], cancellationToken, log)
+                    .ConfigureAwait(false);
+            m.Genres = genres;
+        }
+
+        var actorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (config.TranslateActor && m.Actors?.Any() == true)
+        {
+            var actors = new string[m.Actors.Length];
+            for (var i = 0; i < m.Actors.Length; i++)
+            {
+                var source = m.Actors[i];
+                var translated = await Terms.ResolveAsync(TermKind.Actor, source, cancellationToken, log)
+                    .ConfigureAwait(false);
+                actors[i] = translated;
+                // 两个原名译成同一个名字时保留第一个：PersonInfo 只能有一个 Name，
+                // 去重后只剩一个演员条目，头像按第一条的原名取。
+                if (!string.IsNullOrWhiteSpace(translated))
+                    actorMap.TryAdd(translated, source);
+            }
+            m.Actors = actors;
+        }
+
+        return actorMap;
     }
 
     /// <summary>
-    /// 系列名单独一条链路：先查持久化对照表，命中就不再调引擎（含「表值为空 = 保留原文」）。
-    /// 合集名、系列标签与 {series} 模板变量都取这一个值，所以译法必须每次都一样。
+    /// 术语用的直译入口：与标题/简介共用限速、重试与免费端点降级，
+    /// 但失败必须抛出——TermTranslationService 靠异常区分「引擎失败」和「译名与原文相同」。
     /// </summary>
-    private static async Task<string> TranslateSeriesAsync(string series, string to,
-        CancellationToken cancellationToken, Action<string> log)
+    internal static Task<string> TranslateTermAsync(string text, CancellationToken cancellationToken)
     {
-        if (SeriesTranslationStore.TryGetValue(series, out var cached))
-            return string.IsNullOrWhiteSpace(cached) ? series : cached;
-
-        // 目标语言是中文且系列名已含汉字（iqqtv/airav 直接给中文系列名）时省一次调用。
-        if (ShouldSkipTranslation(series, to))
-            return series;
-
-        var translated = await TranslateFieldSafeAsync(series, to, cancellationToken, log).ConfigureAwait(false);
-        // 先裁再比对：不裁的话 " 甲 " != "甲" 会被当成一次成功翻译，把带空白的串当译文入库。
-        translated = translated?.Trim();
-        // 引擎失败时 TranslateFieldSafeAsync 原样返回，此时不写表，免得把原文当译文固化下来。
-        if (string.IsNullOrWhiteSpace(translated) || translated == series)
-            return series;
-
-        // 译文要直接当合集名用，带换行就存不进按行存的译文表、也建不出正常合集；宁可保留原文。
-        if (translated.Contains('\n') || translated.Contains('\r'))
-        {
-            log($"Translated series contains line breaks, keep original: {series}");
-            return series;
-        }
-
-#if !__EMBY__
-        // 生效译文可能不是引擎这次给的：同一系列的另一部影片可能已经先写了一行（Persist 先到先得）。
-        var effective = SeriesTranslationStore.Persist(series, translated, log);
-        return string.IsNullOrWhiteSpace(effective) ? series : effective;
-#else
-        return translated;
-#endif
-    }
-
-    /// <summary>
-    /// 目标语言为中文且文本已含中文字符时跳过翻译：内容已是中文
-    /// （如 iqqtv / airav 直接提供的中文标题与剧情），省一次机器翻译调用。
-    /// </summary>
-    private static bool ShouldSkipTranslation(string text, string to)
-    {
-        return IsChineseTarget(to) && ContainsChinese(text);
-    }
-
-    private static bool IsChineseTarget(string language)
-    {
-        if (string.IsNullOrWhiteSpace(language))
-            return false;
-        return language.Equals("zh", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("zh-TW", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("zh-Hans", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("zh-Hant", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("chs", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("cht", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("chi", StringComparison.OrdinalIgnoreCase) ||
-               language.Equals("zho", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool ContainsChinese(string text)
-    {
-        var hasHan = false;
-        foreach (var c in text)
-        {
-            // Kana (hiragana/katakana) implies Japanese. Japanese sentences
-            // share the CJK ideograph range with Chinese, so treat any kana
-            // as "not Chinese" to keep Japanese titles from being skipped
-            // as already-Chinese.
-            if ((c >= '\u3040' && c <= '\u309f') || (c >= '\u30a0' && c <= '\u30ff'))
-                return false;
-            if (c >= '\u4e00' && c <= '\u9fff')
-                hasHan = true;
-        }
-        return hasHan;
+        return TranslateFieldAsync(text, cancellationToken, _ => { });
     }
 
     /// <summary>
     /// Translates a single field and keeps the original text on failure, so that a
     /// failing title does not prevent the summary from being translated.
     /// </summary>
-    private static async Task<string> TranslateFieldSafeAsync(string text, string to,
+    private static async Task<string> TranslateFieldSafeAsync(string text,
         CancellationToken cancellationToken, Action<string> log)
     {
         try
         {
-            return await TranslateFieldAsync(text, to, cancellationToken, log).ConfigureAwait(false);
+            return await TranslateFieldAsync(text, cancellationToken, log).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -183,17 +169,17 @@ public static class TranslationHelper
         }
     }
 
-    private static async Task<string> TranslateFieldAsync(string text, string to,
+    private static async Task<string> TranslateFieldAsync(string text,
         CancellationToken cancellationToken, Action<string> log)
     {
         var engine = Configuration.TranslationEngine;
 
         if (engine != TranslationEngine.GoogleFree)
-            return await TranslateTextAsync(text, to, engine, cancellationToken).ConfigureAwait(false);
+            return await TranslateTextAsync(text, engine, cancellationToken).ConfigureAwait(false);
 
         try
         {
-            return await TranslateWithFreeAsync(text, to, cancellationToken).ConfigureAwait(false);
+            return await TranslateWithFreeAsync(text, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -207,7 +193,7 @@ public static class TranslationHelper
 
             log($"Free translate failed: {e.Message}, fallback to OpenAI");
 
-            return await TranslateTextAsync(text, to, TranslationEngine.OpenAi, cancellationToken)
+            return await TranslateTextAsync(text, TranslationEngine.OpenAi, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -215,29 +201,27 @@ public static class TranslationHelper
     /// <summary>
     /// Splits long text into chunks and translates them one by one, then merges the result.
     /// </summary>
-    private static async Task<string> TranslateWithFreeAsync(string text, string to,
-        CancellationToken cancellationToken)
+    private static async Task<string> TranslateWithFreeAsync(string text, CancellationToken cancellationToken)
     {
         var chunks = SplitText(text, FreeChunkLength);
         if (chunks.Count == 1)
-            return await TranslateChunkAsync(chunks[0], to, cancellationToken).ConfigureAwait(false);
+            return await TranslateChunkAsync(chunks[0], cancellationToken).ConfigureAwait(false);
 
         var builder = new StringBuilder(text.Length + 16);
         foreach (var chunk in chunks)
-            builder.Append(await TranslateChunkAsync(chunk, to, cancellationToken).ConfigureAwait(false));
+            builder.Append(await TranslateChunkAsync(chunk, cancellationToken).ConfigureAwait(false));
 
         return builder.ToString();
     }
 
-    private static async Task<string> TranslateChunkAsync(string text, string to,
-        CancellationToken cancellationToken)
+    private static async Task<string> TranslateChunkAsync(string text, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(FreeTimeout);
 
         try
         {
-            return await TranslateTextAsync(text, to, TranslationEngine.GoogleFree, timeoutCts.Token)
+            return await TranslateTextAsync(text, TranslationEngine.GoogleFree, timeoutCts.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -246,7 +230,7 @@ public static class TranslationHelper
         }
     }
 
-    private static async Task<string> TranslateTextAsync(string q, string to, TranslationEngine engine,
+    private static async Task<string> TranslateTextAsync(string q, TranslationEngine engine,
         CancellationToken cancellationToken)
     {
         int millisecondsDelay;
@@ -303,7 +287,7 @@ public static class TranslationHelper
             {
                 await Task.Delay(millisecondsDelay, cancellationToken).ConfigureAwait(false);
                 return (await ApiClient
-                    .TranslateAsync(q, AutoLanguageCode, to, engine.ToString(), nv, cancellationToken)
+                    .TranslateAsync(q, AutoLanguageCode, TargetLanguage, engine.ToString(), nv, cancellationToken)
                     .ConfigureAwait(false)).TranslatedText;
             }
 

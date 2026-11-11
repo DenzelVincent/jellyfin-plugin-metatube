@@ -242,17 +242,65 @@
                 <div class="verticalSection">
                     <h2 class="sectionTitle">Translation</h2>
 
-                    <div class="selectContainer">
-                        <label class="selectLabel selectLabelText" for="selectTranslationMode">Translation mode:</label>
-                        <select class="emby-select-withcolor emby-select selectTranslationMode" id="selectTranslationMode" is="emby-select" name="selectTranslationMode">
-                            <option value="Disabled">Disabled</option>
-                            <option value="Title">Title</option>
-                            <option value="Summary">Summary</option>
-                            <option value="Both">Title and Summary</option>
-                        </select>
+                    <div class="fieldDescription">Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series, genres, makers and labels are cached in the server dictionary.</div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateTitle" class="translationToggle" is="emby-checkbox" name="chkTranslateTitle" type="checkbox"/>
+                            <span>Translate title</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Movie title shown on the item page.</div>
                     </div>
 
-                    <div class="selectTranslationModeEnabled">
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateSummary" class="translationToggle" is="emby-checkbox" name="chkTranslateSummary" type="checkbox"/>
+                            <span>Translate summary</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Movie plot shown on the item page.</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateSeries" class="translationToggle" is="emby-checkbox" name="chkTranslateSeries" type="checkbox"/>
+                            <span>Translate series names</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Collection names, series tags and the {series} template variable use the translated name.</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateGenre" class="translationToggle" is="emby-checkbox" name="chkTranslateGenre" type="checkbox"/>
+                            <span>Translate genres</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Genres shown on the item page.</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateActor" class="translationToggle" is="emby-checkbox" name="chkTranslateActor" type="checkbox"/>
+                            <span>Translate actor names</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Actor entries are displayed with translated names; pids and photos are still searched by the original names.</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateMaker" class="translationToggle" is="emby-checkbox" name="chkTranslateMaker" type="checkbox"/>
+                            <span>Translate makers</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Studios, tags and the {maker} template variable use the translated name.</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkTranslateLabel" class="translationToggle" is="emby-checkbox" name="chkTranslateLabel" type="checkbox"/>
+                            <span>Translate labels</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Tags and the {label} template variable use the translated name.</div>
+                    </div>
+
+                    <div class="translationSettings">
                         <div class="selectContainer">
                             <label class="selectLabel selectLabelText" for="selectTranslationEngine">Translation engine:</label>
                             <select class="emby-select-withcolor emby-select selectTranslationEngine" id="selectTranslationEngine" is="emby-select" name="selectTranslationEngine">
@@ -322,67 +370,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnableSeriesTranslation" is="emby-checkbox" name="chkEnableSeriesTranslation" type="checkbox"/>
-                            <span>Translate series names</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.</div>
-                    </div>
-
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtRawSeriesTranslationTable">Series translation table:</label>
-                        <textarea class="emby-input" id="txtRawSeriesTranslationTable" is="emby-input" name="txtRawSeriesTranslationTable" rows="5"></textarea>
-                        <div class="fieldDescription">One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.</div>
-                    </div>
-
-                </div>
-
-                <div class="verticalSection">
-                    <h2 class="sectionTitle">Substitution</h2>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnableTitleSubstitution" is="emby-checkbox" name="chkEnableTitleSubstitution" type="checkbox"/>
-                            <span>Enable title substitution</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription"></div>
-                    </div>
-
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtTitleRawSubstitutionTable">Title substitution table:</label>
-                        <textarea class="emby-input" id="txtTitleRawSubstitutionTable" is="emby-input" name="txtTitleRawSubstitutionTable" rows="5"></textarea>
-                        <div class="fieldDescription">One record per line, separated by equal signs. Leave the target substring blank to delete the source substring.</div>
-                    </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnableActorSubstitution" is="emby-checkbox" name="chkEnableActorSubstitution" type="checkbox"/>
-                            <span>Enable actor substitution</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription"></div>
-                    </div>
-
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtActorRawSubstitutionTable">Actor substitution table:</label>
-                        <textarea class="emby-input" id="txtActorRawSubstitutionTable" is="emby-input" name="txtActorRawSubstitutionTable" rows="5"></textarea>
-                        <div class="fieldDescription">One record per line, separated by equal signs. Leave the target actor blank to delete the source actor.</div>
-                    </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnableGenreSubstitution" is="emby-checkbox" name="chkEnableGenreSubstitution" type="checkbox"/>
-                            <span>Enable genre substitution</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription"></div>
-                    </div>
-
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabel-float inputLabelUnfocused" for="txtGenreRawSubstitutionTable">Genre substitution table:</label>
-                        <textarea class="emby-input" id="txtGenreRawSubstitutionTable" is="emby-input" name="txtGenreRawSubstitutionTable" rows="5"></textarea>
-                        <div class="fieldDescription">One record per line, separated by equal signs. Leave the target genre blank to delete the source genre.</div>
-                    </div>
                 </div>
 
                 <div>
@@ -398,12 +385,13 @@
             pluginUniqueId: "01cc53ec-c415-4108-bbd4-a684a9801a32"
         };
 
-        $('.selectTranslationMode').on('change', function (_) {
-            if (this.value === "Disabled") {
-                $('.selectTranslationModeEnabled').css('display', 'none');
-            } else {
-                $('.selectTranslationModeEnabled').css('display', 'inherit');
-            }
+        function updateTranslationSettingsVisibility(page) {
+            var enabled = page.querySelector('.translationToggle:checked') !== null;
+            page.querySelector('.translationSettings').style.display = enabled ? '' : 'none';
+        }
+
+        $('.translationToggle').on('change', function (_) {
+            updateTranslationSettingsVisibility($(this).closest('.MetaTubeConfigurationPage')[0]);
         });
 
         $('.selectTranslationEngine').on('change', function (_) {
@@ -525,10 +513,15 @@
                 page.querySelector('#chkEnableTemplate').checked = config.EnableTemplate;
                 $('#txtNameTemplate', page).val(config.NameTemplate).change();
                 $('#txtTaglineTemplate', page).val(config.TaglineTemplate).change();
-                $('#selectTranslationMode', page).val(config.TranslationMode).change();
+                page.querySelector('#chkTranslateTitle').checked = config.TranslateTitle;
+                page.querySelector('#chkTranslateSummary').checked = config.TranslateSummary;
+                page.querySelector('#chkTranslateSeries').checked = config.TranslateSeries;
+                page.querySelector('#chkTranslateGenre').checked = config.TranslateGenre;
+                page.querySelector('#chkTranslateActor').checked = config.TranslateActor;
+                page.querySelector('#chkTranslateMaker').checked = config.TranslateMaker;
+                page.querySelector('#chkTranslateLabel').checked = config.TranslateLabel;
+                updateTranslationSettingsVisibility(page);
                 $('#selectTranslationEngine', page).val(config.TranslationEngine).change();
-                page.querySelector('#chkEnableSeriesTranslation').checked = config.EnableSeriesTranslation;
-                $('#txtRawSeriesTranslationTable', page).val(config.RawSeriesTranslationTable).change();
                 $('#txtBaiduAppId', page).val(config.BaiduAppId).change();
                 $('#txtBaiduAppKey', page).val(config.BaiduAppKey).change();
                 $('#txtGoogleApiKey', page).val(config.GoogleApiKey).change();
@@ -538,12 +531,6 @@
                 $('#txtOpenAiApiKey', page).val(config.OpenAiApiKey).change();
                 $('#txtOpenAiApiUrl', page).val(config.OpenAiApiUrl).change();
                 $('#txtOpenAiModel', page).val(config.OpenAiModel).change();
-                page.querySelector('#chkEnableTitleSubstitution').checked = config.EnableTitleSubstitution;
-                $('#txtTitleRawSubstitutionTable', page).val(config.TitleRawSubstitutionTable).change();
-                page.querySelector('#chkEnableActorSubstitution').checked = config.EnableActorSubstitution;
-                $('#txtActorRawSubstitutionTable', page).val(config.ActorRawSubstitutionTable).change();
-                page.querySelector('#chkEnableGenreSubstitution').checked = config.EnableGenreSubstitution;
-                $('#txtGenreRawSubstitutionTable', page).val(config.GenreRawSubstitutionTable).change();
                 Dashboard.hideLoadingMsg();
             });
         });
@@ -588,10 +575,14 @@
                 config.EnableTemplate = $('#chkEnableTemplate', form).prop('checked');
                 config.NameTemplate = $('#txtNameTemplate', form).val();
                 config.TaglineTemplate = $('#txtTaglineTemplate', form).val();
-                config.TranslationMode = $('#selectTranslationMode', form).val();
+                config.TranslateTitle = $('#chkTranslateTitle', form).prop('checked');
+                config.TranslateSummary = $('#chkTranslateSummary', form).prop('checked');
+                config.TranslateSeries = $('#chkTranslateSeries', form).prop('checked');
+                config.TranslateGenre = $('#chkTranslateGenre', form).prop('checked');
+                config.TranslateActor = $('#chkTranslateActor', form).prop('checked');
+                config.TranslateMaker = $('#chkTranslateMaker', form).prop('checked');
+                config.TranslateLabel = $('#chkTranslateLabel', form).prop('checked');
                 config.TranslationEngine = $('#selectTranslationEngine', form).val();
-                config.EnableSeriesTranslation = $('#chkEnableSeriesTranslation', form).prop('checked');
-                config.RawSeriesTranslationTable = $('#txtRawSeriesTranslationTable', form).val();
                 config.BaiduAppId = $('#txtBaiduAppId', form).val();
                 config.BaiduAppKey = $('#txtBaiduAppKey', form).val();
                 config.GoogleApiKey = $('#txtGoogleApiKey', form).val();
@@ -601,12 +592,6 @@
                 config.OpenAiApiKey = $('#txtOpenAiApiKey', form).val();
                 config.OpenAiApiUrl = $('#txtOpenAiApiUrl', form).val();
                 config.OpenAiModel = $('#txtOpenAiModel', form).val();
-                config.EnableTitleSubstitution = $('#chkEnableTitleSubstitution', form).prop('checked');
-                config.TitleRawSubstitutionTable = $('#txtTitleRawSubstitutionTable', form).val();
-                config.EnableActorSubstitution = $('#chkEnableActorSubstitution', form).prop('checked');
-                config.ActorRawSubstitutionTable = $('#txtActorRawSubstitutionTable', form).val();
-                config.EnableGenreSubstitution = $('#chkEnableGenreSubstitution', form).prop('checked');
-                config.GenreRawSubstitutionTable = $('#txtGenreRawSubstitutionTable', form).val();
                 ApiClient.updatePluginConfiguration(MetaTubePluginConfig.pluginUniqueId, config).then(Dashboard.processPluginConfigurationUpdateResult);
             });
             // Disable default form submission
@@ -691,11 +676,21 @@
                 "Name template:": "名称模板：",
                 "Tagline template:": "标语模板：",
                 "Translation": "翻译",
-                "Translation mode:": "翻译模式：",
-                "Disabled": "禁用",
-                "Title": "标题",
-                "Summary": "简介",
-                "Title and Summary": "标题和简介",
+                "Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series, genres, makers and labels are cached in the server dictionary.": "把勾选的字段翻译成简体中文。只处理勾选项；合集、标签、Studio 与模板变量都用译文生成。标题与简介每次刮削都重新翻译，演员、系列、类别、片商、厂牌译一次后存入服务端字典复用。",
+                "Translate title": "翻译标题",
+                "Movie title shown on the item page.": "影片条目页显示的标题。",
+                "Translate summary": "翻译简介",
+                "Movie plot shown on the item page.": "影片条目页显示的简介。",
+                "Translate series names": "翻译系列名",
+                "Collection names, series tags and the {series} template variable use the translated name.": "合集名、系列标签与 {series} 模板变量使用译文。",
+                "Translate genres": "翻译类别",
+                "Genres shown on the item page.": "影片条目页显示的类别。",
+                "Translate actor names": "翻译演员名",
+                "Actor entries are displayed with translated names; pids and photos are still searched by the original names.": "演员条目显示译名；pid 与头像仍按原名搜索。",
+                "Translate makers": "翻译片商",
+                "Studios, tags and the {maker} template variable use the translated name.": "Studio、标签与 {maker} 模板变量使用译文。",
+                "Translate labels": "翻译厂牌",
+                "Tags and the {label} template variable use the translated name.": "标签与 {label} 模板变量使用译文。",
                 "Translation engine:": "翻译引擎：",
                 "Baidu": "百度",
                 "Google": "谷歌",
@@ -715,20 +710,6 @@
                 "Custom OpenAI-compatible api url. (optional)": "兼容 OpenAI 的自定义 API 地址。（可选）",
                 "OpenAI model:": "OpenAI 模型：",
                 "Custom OpenAI-compatible api model. (optional)": "兼容 OpenAI 的自定义 API 模型。（可选）",
-                "Translate series names": "翻译系列名",
-                "Translate the series name, so that collection names, series tags and the {series} template variable all use the translated name.": "翻译系列名；合集名、系列标签与 {series} 模板变量都会跟着变成译文。",
-                "Series translation table:": "系列译文对照表：",
-                "One record per line, separated by an equal sign, e.g. 系列原名=译文. Leave the target blank to keep the original. A hit in this table never calls the translation engine.": "每行一条记录，用等号分隔，例如 系列原名=译文；等号右侧留空表示保留原文。表内命中就不再调用翻译引擎。",
-                "Substitution": "替换",
-                "Enable title substitution": "启用标题替换",
-                "Title substitution table:": "标题替换表：",
-                "One record per line, separated by equal signs. Leave the target substring blank to delete the source substring.": "每行一条记录，用等号分隔；等号右侧留空表示删除左侧内容。",
-                "Enable actor substitution": "启用演员替换",
-                "Actor substitution table:": "演员替换表：",
-                "One record per line, separated by equal signs. Leave the target actor blank to delete the source actor.": "每行一条记录，用等号分隔；等号右侧留空表示删除该演员。",
-                "Enable genre substitution": "启用类别替换",
-                "Genre substitution table:": "类别替换表：",
-                "One record per line, separated by equal signs. Leave the target genre blank to delete the source genre.": "每行一条记录，用等号分隔；等号右侧留空表示删除该类别。",
                 "Save": "保存"
             };
 

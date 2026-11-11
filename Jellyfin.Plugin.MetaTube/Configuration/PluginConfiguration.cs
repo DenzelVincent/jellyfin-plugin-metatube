@@ -1,4 +1,3 @@
-using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Translation;
 #if __EMBY__
 using System.ComponentModel;
@@ -276,10 +275,42 @@ public class PluginConfiguration : BasePluginConfiguration
 
     public static string DefaultTaglineTemplate => "配信開始日 {date}";
 
+    // 翻译多选：勾选哪一项，页面与派生数据（合集/标签/Studio/模板）就用哪一项的译文。
+    // 目标语言固定 zh-CN；全不勾 = 不翻译。
 #if __EMBY__
-    [DisplayName("翻译模式")]
+    [DisplayName("翻译标题")]
 #endif
-    public TranslationMode TranslationMode { get; set; } = TranslationMode.Disabled;
+    public bool TranslateTitle { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译简介")]
+#endif
+    public bool TranslateSummary { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译系列名")]
+#endif
+    public bool TranslateSeries { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译类别")]
+#endif
+    public bool TranslateGenre { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译演员名")]
+#endif
+    public bool TranslateActor { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译片商")]
+#endif
+    public bool TranslateMaker { get; set; } = false;
+
+#if __EMBY__
+    [DisplayName("翻译厂牌")]
+#endif
+    public bool TranslateLabel { get; set; } = false;
 
 #if __EMBY__
     [DisplayName("翻译引擎")]
@@ -344,89 +375,4 @@ public class PluginConfiguration : BasePluginConfiguration
 #endif
     public string OpenAiModel { get; set; } = string.Empty;
 
-#if __EMBY__
-    [DisplayName("翻译系列名")]
-    [Description("翻译系列名；合集名、系列标签与 {series} 模板变量都会跟着变成译文。")]
-#endif
-    public bool EnableSeriesTranslation { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("系列译文对照表")]
-    [Description(
-        "每行一条记录，用等号分隔，例如 系列原名=译文；等号右侧留空表示保留原文。表内命中就不再调用翻译引擎。")]
-    [EditMultiline(5)]
-#endif
-    public string RawSeriesTranslationTable { get; set; } = string.Empty;
-
-#if __EMBY__
-    [DisplayName("启用标题替换")]
-#endif
-    public bool EnableTitleSubstitution { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("标题替换表")]
-    [Description(
-        "每行一条记录，用等号分隔；等号右侧留空表示删除左侧内容。")]
-    [EditMultiline(5)]
-#endif
-    public string TitleRawSubstitutionTable
-    {
-        get => _titleSubstitutionTable?.ToString();
-        set => _titleSubstitutionTable = SubstitutionTable.Parse(value);
-    }
-
-    public SubstitutionTable GetTitleSubstitutionTable()
-    {
-        return _titleSubstitutionTable;
-    }
-
-    private SubstitutionTable _titleSubstitutionTable;
-
-#if __EMBY__
-    [DisplayName("启用演员替换")]
-#endif
-    public bool EnableActorSubstitution { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("演员替换表")]
-    [Description(
-        "每行一条记录，用等号分隔；等号右侧留空表示删除该演员。")]
-    [EditMultiline(5)]
-#endif
-    public string ActorRawSubstitutionTable
-    {
-        get => _actorSubstitutionTable?.ToString();
-        set => _actorSubstitutionTable = SubstitutionTable.Parse(value);
-    }
-
-    public SubstitutionTable GetActorSubstitutionTable()
-    {
-        return _actorSubstitutionTable;
-    }
-
-    private SubstitutionTable _actorSubstitutionTable;
-
-#if __EMBY__
-    [DisplayName("启用类别替换")]
-#endif
-    public bool EnableGenreSubstitution { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("类别替换表")]
-    [Description(
-        "每行一条记录，用等号分隔；等号右侧留空表示删除该类别。")]
-    [EditMultiline(5)]
-#endif
-    public string GenreRawSubstitutionTable
-    {
-        get => _genreSubstitutionTable?.ToString();
-        set => _genreSubstitutionTable = SubstitutionTable.Parse(value);
-    }
-
-    public SubstitutionTable GetGenreSubstitutionTable()
-    {
-        return _genreSubstitutionTable;
-    }
-
-    private SubstitutionTable _genreSubstitutionTable;
 }

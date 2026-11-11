@@ -97,22 +97,11 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         if (Configuration.EnableRealActorNames)
             await ConvertToRealActorNames(m, cancellationToken);
 
-        // Substitute title.
-        if (Configuration.EnableTitleSubstitution)
-            m.Title = Configuration.GetTitleSubstitutionTable().Substitute(m.Title);
-
-        // Substitute actors.
-        if (Configuration.EnableActorSubstitution)
-            m.Actors = Configuration.GetActorSubstitutionTable().Substitute(m.Actors).ToArray();
-
-        // Substitute genres.
-        if (Configuration.EnableGenreSubstitution)
-            m.Genres = Configuration.GetGenreSubstitutionTable().Substitute(m.Genres).ToArray();
-
-        // Translate movie info. 只开「翻译系列名」而翻译模式为禁用时也要进来，
-        // 具体翻不翻标题/简介由 TranslationHelper 里的 TranslationMode 判断。
-        if (Configuration.TranslationMode != TranslationMode.Disabled || Configuration.EnableSeriesTranslation)
-            await TranslateMovieInfo(m, info.MetadataLanguage, cancellationToken);
+        // Translate movie info. 返回「译名 → 原名」的演员映射：
+        // 演员条目显示译名，但搜索 pid/头像必须用服务端收录的原名。
+        var actorOriginalNames = TranslationHelper.IsEnabled
+            ? await TranslateMovieInfo(m, cancellationToken)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Distinct and clean blank list
         m.Genres = m.Genres?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray() ?? Array.Empty<string>();
@@ -221,7 +210,9 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
                 Type = PersonKind.Actor,
 #endif
             };
-            await SetActorImageUrl(actor, cancellationToken);
+            // 译名只用于显示；pid 与头像仍按原名搜索（服务端用日文原名收录演员）。
+            var searchName = actorOriginalNames.TryGetValue(name, out var original) ? original : name;
+            await SetActorImageUrl(actor, searchName, cancellationToken);
             result.AddPerson(actor);
         }
 
@@ -304,14 +295,14 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         return results;
     }
 
-    private async Task SetActorImageUrl(PersonInfo actor, CancellationToken cancellationToken)
+    private async Task SetActorImageUrl(PersonInfo actor, string searchName, CancellationToken cancellationToken)
     {
         try
         {
-            var results = await ApiClient.SearchActorAsync(actor.Name, cancellationToken);
+            var results = await ApiClient.SearchActorAsync(searchName, cancellationToken);
             if (results?.Any() != true)
             {
-                Logger.Warn("Actor not found: {0}", actor.Name);
+                Logger.Warn("Actor not found: {0}", searchName);
                 return;
             }
 
@@ -339,7 +330,7 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         }
         catch (Exception e)
         {
-            Logger.Error("Get actor image error: {0} ({1})", actor.Name, e.Message);
+            Logger.Error("Get actor image error: {0} ({1})", searchName, e.Message);
         }
     }
 
@@ -404,17 +395,19 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         }
     }
 
-    private async Task TranslateMovieInfo(Metadata.MovieInfo m, string language, CancellationToken cancellationToken)
+    private async Task<Dictionary<string, string>> TranslateMovieInfo(Metadata.MovieInfo m,
+        CancellationToken cancellationToken)
     {
         try
         {
-            Logger.Info("Translate movie info language: {0} => {1}", m.Number, language);
-            await TranslationHelper.TranslateAsync(m, language, cancellationToken,
+            Logger.Info("Translate movie info: {0} => {1}", m.Number, TranslationHelper.TargetLanguage);
+            return await TranslationHelper.TranslateMovieAsync(m, cancellationToken,
                 message => Logger.Info("{0}", message));
         }
         catch (Exception e)
         {
             Logger.Error("Translate error: {0}", e.Message);
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 

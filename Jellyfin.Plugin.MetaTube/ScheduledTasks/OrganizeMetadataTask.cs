@@ -125,11 +125,7 @@ public class OrganizeMetadataTask : IScheduledTask
             }
 
             // Remove duplicates.
-            var orderedGenres =
-                (Plugin.Instance.Configuration.EnableGenreSubstitution
-                    // Substitute genres.
-                    ? Plugin.Instance.Configuration.GetGenreSubstitutionTable().Substitute(genres)
-                    : genres).Distinct().OrderByString(genre => genre).ToList();
+            var orderedGenres = genres.Distinct().OrderByString(genre => genre).ToList();
 
             // Skip updating item if equal, unless the primary image was just repaired.
             if (!imageUpdated &&

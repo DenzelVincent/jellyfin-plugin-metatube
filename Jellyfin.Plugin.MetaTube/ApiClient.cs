@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -20,6 +21,7 @@ public static class ApiClient
     private const string ThumbImageApi = "/v1/images/thumb";
     private const string BackdropImageApi = "/v1/images/backdrop";
     private const string TranslateApi = "/v1/translate";
+    private const string TranslationTermApi = "/v1/translations/term";
     private const string ImageCacheApi = "/v1/images/cache";
     private const string MovieAggregateApi = "/v1/movies/aggregate";
 
@@ -228,6 +230,70 @@ public static class ApiClient
     {
         var apiUrl = ComposeTranslateApiUrl(TranslateApi, q, from, to, engine, nv);
         return await GetDataAsync<TranslationInfo>(apiUrl, false, cancellationToken);
+    }
+
+    /// <summary>
+    /// 查询服务端术语字典。未命中时服务端返回 200 + found=false。
+    /// </summary>
+    public static async Task<TranslationTermInfo> LookupTranslationTermAsync(string kind, string source,
+        string targetLang, CancellationToken cancellationToken)
+    {
+        var apiUrl = ComposeUrl(TranslationTermApi, new NameValueCollection
+        {
+            { "kind", kind },
+            { "target_lang", targetLang },
+            { "source", source }
+        });
+        return await SendTranslationTermRequestAsync(HttpMethod.Get, apiUrl, null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 写入服务端术语字典（首写优先），返回服务端实际生效的译文。
+    /// </summary>
+    public static async Task<TranslationTermInfo> SaveTranslationTermAsync(string kind, string source,
+        string targetLang, string translatedText, string engine, CancellationToken cancellationToken)
+    {
+        var apiUrl = ComposeUrl(TranslationTermApi, new NameValueCollection());
+        var body = new TranslationTermRequest
+        {
+            Kind = kind,
+            TargetLang = targetLang,
+            Source = source,
+            TranslatedText = translatedText,
+            Engine = engine
+        };
+        return await SendTranslationTermRequestAsync(HttpMethod.Put, apiUrl, body, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<TranslationTermInfo> SendTranslationTermRequestAsync(HttpMethod method, string apiUrl,
+        TranslationTermRequest body, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var request = CreateRequest(method, apiUrl, true);
+        if (body != null)
+            request.Content = JsonContent.Create(body);
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        // 旧服务端没有这个路由：404 明确表示「不支持字典」，
+        // 上层据此降级为直接翻译，不能当成普通 API 错误打断刮削。
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new TranslationTermApiUnavailableException();
+
+        var apiResponse = (await response.Content!
+            .ReadFromJsonAsync<ResponseInfo<TranslationTermInfo>>(cancellationToken: cancellationToken)
+            .ConfigureAwait(false))!;
+
+        if (!response.IsSuccessStatusCode && apiResponse.Error != null)
+            throw new Exception($"API request error: {apiResponse.Error.Code} ({apiResponse.Error.Message})");
+
+        if (apiResponse.Data == null)
+            throw new Exception("Response data field is null");
+
+        return apiResponse.Data;
     }
 
     /// <summary>
