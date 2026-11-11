@@ -91,7 +91,7 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
             }
 
             Logger.Info("Get movie info: {0}", pid.ToString());
-            m = await ApiClient.GetMovieInfoAsync(pid.Provider, pid.Id, cancellationToken);
+            m = await MovieInfoCache.GetAsync(pid.Provider, pid.Id, cancellationToken);
         }
 
         // Preserve original title.
@@ -347,7 +347,7 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
             // 头像优先取演员详情接口；失败时保留搜索结果里的图。
             try
             {
-                var actorInfo = await ApiClient.GetActorInfoAsync(provider, actorId, cancellationToken);
+                var actorInfo = await ActorInfoCache.GetAsync(provider, actorId, cancellationToken);
                 if (actorInfo?.Images?.Any() == true)
                 {
                     imageUrl = ApiClient.GetPrimaryImageApiUrl(

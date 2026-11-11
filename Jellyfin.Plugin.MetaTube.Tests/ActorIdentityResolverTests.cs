@@ -59,6 +59,24 @@ public class ActorIdentityResolverTests
         Assert.Equal("source", saved.TranslationSource);
         Assert.Equal("MINNANO", saved.Provider);
         Assert.Equal("42", saved.ActorId);
+        // 身份解析用一次批量查询，不再逐条查、也不再取演员详情。
+        Assert.Equal(1, store.LookupManyCalls);
+        Assert.Equal(0, store.LookupCalls);
+        Assert.Equal(0, directory.GetCalls);
+    }
+
+    [Fact]
+    public async Task NegativeCacheSkipsRepeatedMissesForSharedStageName()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory { SearchResults = new List<ActorSearchResult>() };
+        var resolver = new ActorIdentityResolver(store, directory, new FakeTranslator());
+
+        await resolver.ResolveAllAsync(new[] { "甲（ゆい はつみ）" }, false, "zh-CN", CancellationToken.None);
+        await resolver.ResolveAllAsync(new[] { "乙（ゆい はつみ）" }, false, "zh-CN", CancellationToken.None);
+
+        Assert.Equal(2, store.LookupManyCalls);
+        Assert.DoesNotContain("ゆい はつみ", store.LastNames, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -114,7 +132,7 @@ public class ActorIdentityResolverTests
         await resolver.ResolveAllAsync(new[] { "甲（あ）", "乙（い）" }, false, "zh-CN",
             CancellationToken.None, logs.Add);
 
-        Assert.Equal(1, store.LookupCalls);
+        Assert.Equal(1, store.LookupManyCalls);
         Assert.Equal(0, store.SaveCalls);
         Assert.Single(logs, message => message.StartsWith("Actor alias store unavailable"));
     }
@@ -302,10 +320,10 @@ public class ActorIdentityResolverTests
         var resolver = new ActorIdentityResolver(store, new FakeDirectory(), new FakeTranslator());
 
         await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, false, "zh-CN", CancellationToken.None);
-        var lookups = store.LookupCalls;
+        var lookups = store.LookupManyCalls;
         await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, false, "zh-CN", CancellationToken.None);
 
-        Assert.Equal(lookups, store.LookupCalls);
+        Assert.Equal(lookups, store.LookupManyCalls);
     }
 
     private static ActorAliasResult Found(string provider, string id, string stage, string translated)
@@ -332,6 +350,9 @@ public class ActorIdentityResolverTests
         public int SaveCalls { get; private set; }
         public List<ActorAliasRequest> Saved { get; } = new();
 
+        public int LookupManyCalls { get; private set; }
+        public List<string> LastNames { get; private set; } = new();
+
         public Task<ActorAliasResult> LookupAsync(string name, CancellationToken cancellationToken)
         {
             LookupCalls++;
@@ -340,6 +361,22 @@ public class ActorIdentityResolverTests
             return Task.FromResult(ByName.TryGetValue(name, out var result)
                 ? result
                 : new ActorAliasResult { Found = false });
+        }
+
+        public Task<IReadOnlyDictionary<string, ActorAliasResult>> LookupManyAsync(
+            IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+        {
+            LookupManyCalls++;
+            LastNames = names.ToList();
+            if (LookupError != null)
+                return Task.FromException<IReadOnlyDictionary<string, ActorAliasResult>>(LookupError);
+
+            var map = new Dictionary<string, ActorAliasResult>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+                map[name] = ByName.TryGetValue(name, out var result)
+                    ? result
+                    : new ActorAliasResult { Found = false };
+            return Task.FromResult<IReadOnlyDictionary<string, ActorAliasResult>>(map);
         }
 
         public Task<ActorAliasResult> SaveAsync(ActorAliasRequest request, CancellationToken cancellationToken)
@@ -367,6 +404,7 @@ public class ActorIdentityResolverTests
         public ActorInfo Detail { get; set; }
         public Dictionary<string, ActorInfo> Details { get; } = new(StringComparer.OrdinalIgnoreCase);
         public int SearchCalls { get; private set; }
+        public int GetCalls { get; private set; }
 
         public Task<List<ActorSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
         {
@@ -376,6 +414,7 @@ public class ActorIdentityResolverTests
 
         public Task<ActorInfo> GetAsync(string provider, string id, CancellationToken cancellationToken)
         {
+            GetCalls++;
             if (Details.TryGetValue(provider + ":" + id, out var detail))
                 return Task.FromResult(detail);
             return Task.FromResult(Detail);

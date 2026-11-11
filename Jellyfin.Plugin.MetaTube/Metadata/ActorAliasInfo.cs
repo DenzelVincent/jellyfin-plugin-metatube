@@ -59,6 +59,38 @@ public class ActorAliasRequest
     public string Source { get; set; }
 }
 
+/// <summary>POST /v1/actor-aliases/lookup 的请求体。</summary>
+public class ActorAliasLookupRequest
+{
+    [JsonPropertyName("names")]
+    public string[] Names { get; set; }
+}
+
+/// <summary>批量查询里单个名字的结果。</summary>
+public class ActorAliasLookupItem
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("found")]
+    public bool Found { get; set; }
+
+    [JsonPropertyName("ambiguous")]
+    public bool Ambiguous { get; set; }
+
+    [JsonPropertyName("person")]
+    public ActorAliasPersonInfo Person { get; set; }
+
+    [JsonPropertyName("matches")]
+    public ActorAliasPersonInfo[] Matches { get; set; }
+}
+
+public class ActorAliasLookupResult
+{
+    [JsonPropertyName("items")]
+    public ActorAliasLookupItem[] Items { get; set; }
+}
+
 /// <summary>
 /// 服务端没有演员身份接口（通常是旧版本）。上层收到它应降级为
 /// 「只按演员搜索解析」，不能当成普通 API 错误打断刮削。

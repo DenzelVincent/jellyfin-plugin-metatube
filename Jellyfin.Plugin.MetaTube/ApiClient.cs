@@ -293,6 +293,34 @@ public static class ApiClient
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 批量查询演员身份：一次请求覆盖整部影片的演员。
+    /// </summary>
+    public static async Task<ActorAliasLookupResult> LookupActorAliasesAsync(
+        IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+    {
+        var apiUrl = ComposeUrl(ActorAliasApi + "/lookup", new NameValueCollection());
+        var body = new ActorAliasLookupRequest { Names = names.ToArray() };
+
+        using var request = CreateRequest(HttpMethod.Post, apiUrl, true);
+        request.Content = JsonContent.Create(body);
+        using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new ActorAliasApiUnavailableException();
+
+        var apiResponse = (await response.Content!
+            .ReadFromJsonAsync<ResponseInfo<ActorAliasLookupResult>>(cancellationToken: cancellationToken)
+            .ConfigureAwait(false))!;
+
+        if (!response.IsSuccessStatusCode && apiResponse.Error != null)
+            throw new Exception($"API request error: {apiResponse.Error.Code} ({apiResponse.Error.Message})");
+        if (apiResponse.Data == null)
+            throw new Exception("Response data field is null");
+
+        return apiResponse.Data;
+    }
+
     private static async Task<ActorAliasResult> SendActorAliasRequestAsync(HttpMethod method, string apiUrl,
         ActorAliasRequest body, CancellationToken cancellationToken)
     {

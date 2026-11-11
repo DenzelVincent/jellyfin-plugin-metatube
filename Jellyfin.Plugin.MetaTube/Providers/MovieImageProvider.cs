@@ -46,7 +46,7 @@ public class MovieImageProvider : BaseProvider, IRemoteImageProvider, IHasOrder
         {
             try
             {
-                var m = await ApiClient.GetMovieInfoAsync(candidate.Provider, candidate.Id,
+                var m = await MovieInfoCache.GetAsync(candidate.Provider, candidate.Id,
                     cancellationToken);
                 var position = candidate.Position ?? -1;
                 // 上游 issue 653：DMM 系源的 cover_url 是 800×538 转存图，打开开关后换成新 CDN 的高清版；
