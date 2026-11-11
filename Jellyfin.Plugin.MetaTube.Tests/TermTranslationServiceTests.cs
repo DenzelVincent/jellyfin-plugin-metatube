@@ -119,8 +119,8 @@ public class TermTranslationServiceTests
         var translator = new FakeTranslator { Result = "   " };
         var service = new TermTranslationService(store, translator);
 
-        var first = await service.ResolveAsync(TermKind.Label, "S1", CancellationToken.None);
-        var second = await service.ResolveAsync(TermKind.Label, "S1", CancellationToken.None);
+        var first = await service.ResolveAsync(TermKind.Genre, "S1", CancellationToken.None);
+        var second = await service.ResolveAsync(TermKind.Genre, "S1", CancellationToken.None);
 
         Assert.Equal("S1", first);
         Assert.Equal("S1", second);

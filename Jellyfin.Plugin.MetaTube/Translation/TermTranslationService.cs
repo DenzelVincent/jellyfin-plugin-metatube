@@ -8,9 +8,7 @@ public enum TermKind
 {
     Actor,
     Series,
-    Genre,
-    Maker,
-    Label
+    Genre
 }
 
 /// <summary>服务端术语字典的读写入口。失败时抛异常，由调用方决定是否降级。</summary>

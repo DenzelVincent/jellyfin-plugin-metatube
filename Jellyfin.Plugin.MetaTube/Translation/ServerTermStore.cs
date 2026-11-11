@@ -28,8 +28,6 @@ internal sealed class ServerTermStore : ITermStore
             TermKind.Actor => "actor",
             TermKind.Series => "series",
             TermKind.Genre => "genre",
-            TermKind.Maker => "maker",
-            TermKind.Label => "label",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         };
     }

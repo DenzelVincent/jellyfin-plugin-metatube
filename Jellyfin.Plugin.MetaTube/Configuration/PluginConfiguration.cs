@@ -178,7 +178,7 @@ public class PluginConfiguration : BasePluginConfiguration
         "源名称不区分大小写，越靠左优先级越高，多个源用英文逗号分隔。\n" +
         "可用源：JavBus, FANZA, JAV321, AVE, MGS, AVBASE, GFriends, 10musume, 1Pondo, AiRav, " +
         "AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, " +
-        "FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, JavDB, " +
+        "FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, " +
         "KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, " +
         "ThePornDBScene, TOKYO-HOT, Wikipedia。\n默认：JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends")]
 #endif
@@ -244,12 +244,6 @@ public class PluginConfiguration : BasePluginConfiguration
         return result;
     }
 
-#if __EMBY__
-    [DisplayName("JavDB Cookie")]
-    [Description("JavDB 的反爬 Cookie，登录 javdb.com 后从浏览器复制，留空则不带。")]
-#endif
-    public string JavDbCookie { get; set; } = string.Empty;
-
     // 越靠左优先级越高。FANZA 对新番收录最全，不能漏掉。
     private List<string> _movieProviderFilter = new()
     {
@@ -301,16 +295,6 @@ public class PluginConfiguration : BasePluginConfiguration
     [DisplayName("翻译演员名")]
 #endif
     public bool TranslateActor { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("翻译片商")]
-#endif
-    public bool TranslateMaker { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("翻译厂牌")]
-#endif
-    public bool TranslateLabel { get; set; } = false;
 
 #if __EMBY__
     [DisplayName("翻译引擎")]

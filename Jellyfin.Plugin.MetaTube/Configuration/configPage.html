@@ -191,7 +191,7 @@
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="txtRawMovieProviderFilter">Movie provider filter:</label>
                         <input id="txtRawMovieProviderFilter" is="emby-input" name="txtRawMovieProviderFilter" type="text"/>
-                        <div class="fieldDescription">Provider names are case-insensitive, with decreasing precedence from left to right, separated by commas. Available: JavBus, FANZA, JAV321, AVE, MGS, AVBASE, GFriends, 10musume, 1Pondo, AiRav, AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, JavDB, KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, ThePornDBScene, TOKYO-HOT, Wikipedia. (default: JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends)</div>
+                        <div class="fieldDescription">Provider names are case-insensitive, with decreasing precedence from left to right, separated by commas. Available: JavBus, FANZA, JAV321, AVE, MGS, AVBASE, GFriends, 10musume, 1Pondo, AiRav, AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, ThePornDBScene, TOKYO-HOT, Wikipedia. (default: JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends)</div>
                     </div>
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
@@ -208,11 +208,6 @@
                         <div class="fieldDescription">Per-field provider order, e.g. "Title:JavBus,FANZA;Summary:FANZA,JavBus". Fields: Title, Summary, CoverURL, Director, Actors, Genres, Series, Maker, Label, Score, Runtime, ReleaseDate, PreviewImages.</div>
                     </div>
 
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="txtJavDbCookie">JavDB cookie:</label>
-                        <input id="txtJavDbCookie" is="emby-input" name="txtJavDbCookie" type="text"/>
-                        <div class="fieldDescription">JavDB anti-bot cookie, copy from your browser after logging into javdb.com. Leave blank to disable.</div>
-                    </div>
                 </div>
 
                 <div class="verticalSection">
@@ -242,7 +237,7 @@
                 <div class="verticalSection">
                     <h2 class="sectionTitle">Translation</h2>
 
-                    <div class="fieldDescription">Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series, genres, makers and labels are cached in the server dictionary.</div>
+                    <div class="fieldDescription">Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series and genres are cached in the server dictionary.</div>
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
@@ -282,22 +277,6 @@
                             <span>Translate actor names</span>
                         </label>
                         <div class="fieldDescription checkboxFieldDescription">Actor entries are displayed with translated names; pids and photos are still searched by the original names.</div>
-                    </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkTranslateMaker" class="translationToggle" is="emby-checkbox" name="chkTranslateMaker" type="checkbox"/>
-                            <span>Translate makers</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">Studios, tags and the {maker} template variable use the translated name.</div>
-                    </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkTranslateLabel" class="translationToggle" is="emby-checkbox" name="chkTranslateLabel" type="checkbox"/>
-                            <span>Translate labels</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">Tags and the {label} template variable use the translated name.</div>
                     </div>
 
                     <div class="translationSettings">
@@ -516,7 +495,6 @@
                 $('#txtRawMovieProviderFilter', page).val(config.RawMovieProviderFilter).change();
                 page.querySelector('#chkEnableFieldAggregation').checked = config.EnableFieldAggregation;
                 $('#txtRawFieldPriority', page).val(config.RawFieldPriority).change();
-                $('#txtJavDbCookie', page).val(config.JavDbCookie).change();
                 page.querySelector('#chkEnableTemplate').checked = config.EnableTemplate;
                 $('#txtNameTemplate', page).val(config.NameTemplate).change();
                 $('#txtTaglineTemplate', page).val(config.TaglineTemplate).change();
@@ -525,8 +503,6 @@
                 page.querySelector('#chkTranslateSeries').checked = config.TranslateSeries;
                 page.querySelector('#chkTranslateGenre').checked = config.TranslateGenre;
                 page.querySelector('#chkTranslateActor').checked = config.TranslateActor;
-                page.querySelector('#chkTranslateMaker').checked = config.TranslateMaker;
-                page.querySelector('#chkTranslateLabel').checked = config.TranslateLabel;
                 updateTranslationSettingsVisibility(page);
                 $('#selectTranslationEngine', page).val(config.TranslationEngine).change();
                 $('#txtBaiduAppId', page).val(config.BaiduAppId).change();
@@ -578,7 +554,6 @@
                 config.RawMovieProviderFilter = $('#txtRawMovieProviderFilter', form).val();
                 config.EnableFieldAggregation = $('#chkEnableFieldAggregation', form).prop('checked');
                 config.RawFieldPriority = $('#txtRawFieldPriority', form).val();
-                config.JavDbCookie = $('#txtJavDbCookie', form).val();
                 config.EnableTemplate = $('#chkEnableTemplate', form).prop('checked');
                 config.NameTemplate = $('#txtNameTemplate', form).val();
                 config.TaglineTemplate = $('#txtTaglineTemplate', form).val();
@@ -587,8 +562,6 @@
                 config.TranslateSeries = $('#chkTranslateSeries', form).prop('checked');
                 config.TranslateGenre = $('#chkTranslateGenre', form).prop('checked');
                 config.TranslateActor = $('#chkTranslateActor', form).prop('checked');
-                config.TranslateMaker = $('#chkTranslateMaker', form).prop('checked');
-                config.TranslateLabel = $('#chkTranslateLabel', form).prop('checked');
                 config.TranslationEngine = $('#selectTranslationEngine', form).val();
                 config.BaiduAppId = $('#txtBaiduAppId', form).val();
                 config.BaiduAppKey = $('#txtBaiduAppKey', form).val();
@@ -669,13 +642,11 @@
                 "Enable movie provider filter": "启用影片源过滤",
                 "Filter and reorder search results from movie providers.": "过滤并排序来自各影片源的搜索结果。",
                 "Movie provider filter:": "影片源过滤：",
-                "Provider names are case-insensitive, with decreasing precedence from left to right, separated by commas. Available: JavBus, FANZA, JAV321, AVE, MGS, AVBASE, GFriends, 10musume, 1Pondo, AiRav, AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, JavDB, KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, ThePornDBScene, TOKYO-HOT, Wikipedia. (default: JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends)": "源名称不区分大小写，越靠左优先级越高，多个源用英文逗号分隔。可用源：JavBus、FANZA、JAV321、AVE、MGS、AVBASE、GFriends、10musume、1Pondo、AiRav、AV-LEAGUE、AVSOX、C0930、Caribbeancom、CaribbeancomPR、DAHLIA、DUGA、FALENO、FC2、fc2hub、FC2PPVDB、FREEJAVBT、Gcolle、Getchu、H0930、H4610、HEYZO、HeyDouga、IQQTV、JAVFREE、JavDB、KIN8、MadouQu、MINNANO、MURAMURA、MYWIFE、OFFICIAL、PACOPACOMAMA、Pcolle、SOD、ThePornDBMovie、ThePornDBScene、TOKYO-HOT、Wikipedia。（默认：JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends）",
+                "Provider names are case-insensitive, with decreasing precedence from left to right, separated by commas. Available: JavBus, FANZA, JAV321, AVE, MGS, AVBASE, GFriends, 10musume, 1Pondo, AiRav, AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, ThePornDBScene, TOKYO-HOT, Wikipedia. (default: JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends)": "源名称不区分大小写，越靠左优先级越高，多个源用英文逗号分隔。可用源：JavBus、FANZA、JAV321、AVE、MGS、AVBASE、GFriends、10musume、1Pondo、AiRav、AV-LEAGUE、AVSOX、C0930、Caribbeancom、CaribbeancomPR、DAHLIA、DUGA、FALENO、FC2、fc2hub、FC2PPVDB、FREEJAVBT、Gcolle、Getchu、H0930、H4610、HEYZO、HeyDouga、IQQTV、JAVFREE、KIN8、MadouQu、MINNANO、MURAMURA、MYWIFE、OFFICIAL、PACOPACOMAMA、Pcolle、SOD、ThePornDBMovie、ThePornDBScene、TOKYO-HOT、Wikipedia。（默认：JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends）",
                 "Enable field aggregation": "启用字段级聚合",
                 "Merge fields across providers: title, plot and cover can each come from a different source.": "跨源按字段取优：标题、简介、封面可分别来自不同源。",
                 "Field priority:": "字段优先级：",
                 "Per-field provider order, e.g. \"Title:JavBus,FANZA;Summary:FANZA,JavBus\". Fields: Title, Summary, CoverURL, Director, Actors, Genres, Series, Maker, Label, Score, Runtime, ReleaseDate, PreviewImages.": "按字段指定取优源，例如 \"Title:JavBus,FANZA;Summary:FANZA,JavBus\"。可用字段：Title、Summary、CoverURL、Director、Actors、Genres、Series、Maker、Label、Score、Runtime、ReleaseDate、PreviewImages。",
-                "JavDB cookie:": "JavDB Cookie：",
-                "JavDB anti-bot cookie, copy from your browser after logging into javdb.com. Leave blank to disable.": "JavDB 反爬 Cookie，登录 javdb.com 后从浏览器复制，留空则不带。",
                 "Template": "模板",
                 "Enable template": "启用模板",
                 "Predefined template variables can be found": "预置模板变量的说明见",
@@ -683,7 +654,7 @@
                 "Name template:": "名称模板：",
                 "Tagline template:": "标语模板：",
                 "Translation": "翻译",
-                "Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series, genres, makers and labels are cached in the server dictionary.": "把勾选的字段翻译成简体中文。只处理勾选项；合集、标签、Studio 与模板变量都用译文生成。标题与简介每次刮削都重新翻译，演员、系列、类别、片商、厂牌译一次后存入服务端字典复用。",
+                "Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series and genres are cached in the server dictionary.": "把勾选的字段翻译成简体中文。只处理勾选项；合集、标签、Studio 与模板变量都用译文生成。标题与简介每次刮削都重新翻译，演员、系列、类别译一次后存入服务端字典复用。",
                 "Translate title": "翻译标题",
                 "Movie title shown on the item page.": "影片条目页显示的标题。",
                 "Translate summary": "翻译简介",
@@ -694,10 +665,6 @@
                 "Genres shown on the item page.": "影片条目页显示的类别。",
                 "Translate actor names": "翻译演员名",
                 "Actor entries are displayed with translated names; pids and photos are still searched by the original names.": "演员条目显示译名；pid 与头像仍按原名搜索。",
-                "Translate makers": "翻译片商",
-                "Studios, tags and the {maker} template variable use the translated name.": "Studio、标签与 {maker} 模板变量使用译文。",
-                "Translate labels": "翻译厂牌",
-                "Tags and the {label} template variable use the translated name.": "标签与 {label} 模板变量使用译文。",
                 "Translation engine:": "翻译引擎：",
                 "Baidu": "百度",
                 "Google": "谷歌",

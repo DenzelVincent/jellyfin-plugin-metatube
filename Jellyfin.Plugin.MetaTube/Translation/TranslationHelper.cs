@@ -39,8 +39,7 @@ public static class TranslationHelper
         {
             var config = Configuration;
             return config.TranslateTitle || config.TranslateSummary || config.TranslateSeries ||
-                   config.TranslateGenre || config.TranslateActor || config.TranslateMaker ||
-                   config.TranslateLabel;
+                   config.TranslateGenre || config.TranslateActor;
         }
     }
 
@@ -65,14 +64,6 @@ public static class TranslationHelper
 
         if (config.TranslateSeries && !string.IsNullOrWhiteSpace(m.Series))
             m.Series = await Terms.ResolveAsync(TermKind.Series, m.Series, cancellationToken, log)
-                .ConfigureAwait(false);
-
-        if (config.TranslateMaker && !string.IsNullOrWhiteSpace(m.Maker))
-            m.Maker = await Terms.ResolveAsync(TermKind.Maker, m.Maker, cancellationToken, log)
-                .ConfigureAwait(false);
-
-        if (config.TranslateLabel && !string.IsNullOrWhiteSpace(m.Label))
-            m.Label = await Terms.ResolveAsync(TermKind.Label, m.Label, cancellationToken, log)
                 .ConfigureAwait(false);
 
         if (config.TranslateGenre && m.Genres?.Any() == true)

@@ -317,11 +317,6 @@ public static class ApiClient
         request.Headers.Add("Accept", "application/json");
         request.Headers.Add("User-Agent", DefaultUserAgent);
 
-        // Pass the JavDB anti-bot cookie to the backend so it can scrape
-        // javdb.com without being blocked.
-        if (!string.IsNullOrWhiteSpace(Plugin.Instance.Configuration.JavDbCookie))
-            request.Headers.TryAddWithoutValidation("X-JavDB-Cookie", Plugin.Instance.Configuration.JavDbCookie);
-
         // Set API Authorization Token.
         if (requireAuth && !string.IsNullOrWhiteSpace(Plugin.Instance.Configuration.Token))
             request.Headers.Authorization =
