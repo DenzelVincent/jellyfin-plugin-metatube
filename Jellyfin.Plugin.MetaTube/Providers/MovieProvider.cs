@@ -97,6 +97,9 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         if (Configuration.EnableRealActorNames)
             await ConvertToRealActorNames(m, cancellationToken);
 
+        // 去掉「名字（读音）」末尾的读音注解：展示、翻译与演员搜索统一用不带读音的名字。
+        m.Actors = ActorNameHelper.NormalizeAll(m.Actors);
+
         // Translate movie info. 返回「译名 → 原名」的演员映射：
         // 演员条目显示译名，但搜索 pid/头像必须用服务端收录的原名。
         var actorOriginalNames = TranslationHelper.IsEnabled

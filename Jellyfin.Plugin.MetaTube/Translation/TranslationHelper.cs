@@ -78,19 +78,24 @@ public static class TranslationHelper
         var actorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (config.TranslateActor && m.Actors?.Any() == true)
         {
-            var actors = new string[m.Actors.Length];
-            for (var i = 0; i < m.Actors.Length; i++)
-            {
-                var source = m.Actors[i];
-                var translated = await Terms.ResolveAsync(TermKind.Actor, source, cancellationToken, log)
+            var sources = m.Actors;
+            var translatedNames = new string[sources.Length];
+            for (var i = 0; i < sources.Length; i++)
+                translatedNames[i] = await Terms.ResolveAsync(TermKind.Actor, sources[i], cancellationToken, log)
                     .ConfigureAwait(false);
-                actors[i] = translated;
-                // 两个原名译成同一个名字时保留第一个：PersonInfo 只能有一个 Name，
-                // 去重后只剩一个演员条目，头像按第一条的原名取。
-                if (!string.IsNullOrWhiteSpace(translated))
-                    actorMap.TryAdd(translated, source);
+
+            // 两个不同演员译成同一个名字时不能直接合并：后出现的那位保留原名，
+            // 否则 Distinct() 会把它从演职表里抹掉。
+            var effectiveNames = ActorNameHelper.ResolveTranslatedCollisions(sources, translatedNames);
+            for (var i = 0; i < effectiveNames.Length; i++)
+            {
+                if (effectiveNames[i] != translatedNames[i])
+                    log($"Actor name collision, keep original: {sources[i]} ({translatedNames[i]})");
+                if (!string.IsNullOrWhiteSpace(effectiveNames[i]))
+                    actorMap.TryAdd(effectiveNames[i], sources[i]);
             }
-            m.Actors = actors;
+
+            m.Actors = effectiveNames;
         }
 
         return actorMap;
