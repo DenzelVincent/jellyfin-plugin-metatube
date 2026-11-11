@@ -271,13 +271,12 @@ public static class ApiClient
     /// <summary>
     /// 查询演员别名表。未命中返回 found=false；同名不同人返回 ambiguous=true。
     /// </summary>
-    public static async Task<ActorAliasResult> LookupActorAliasAsync(string name, string targetLang,
+    public static async Task<ActorAliasResult> LookupActorAliasAsync(string name,
         CancellationToken cancellationToken)
     {
         var apiUrl = ComposeUrl(ActorAliasApi, new NameValueCollection
         {
-            { "name", name },
-            { "target_lang", targetLang }
+            { "name", name }
         });
         return await SendActorAliasRequestAsync(HttpMethod.Get, apiUrl, null, cancellationToken)
             .ConfigureAwait(false);

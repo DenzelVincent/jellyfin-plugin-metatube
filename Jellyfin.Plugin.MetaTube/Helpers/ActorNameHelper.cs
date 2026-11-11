@@ -1,19 +1,14 @@
 namespace Jellyfin.Plugin.MetaTube.Helpers;
 
 /// <summary>
-/// 演员名拆分与角色分类。
+/// 演员名拆分。
 ///
-/// 影片来源常见写法是「汉字名（括号内名字）」：括号内通常是搜索更准确的艺名/
-/// 假名写法，页面显示用括号外的汉字名。原始字符串不删改，拆分结果只用于显示、
-/// 搜索与入表；别名关系由服务端 actor_name 表维护。
+/// 影片来源常见写法是「A（B）」：B 是搜索更准确的艺名（含假名写法），A 是数据源
+/// 可能已转换好的汉字名（直接当译名）。没有括号时整串就是 B。原始字符串不删改，
+/// 拆分结果只用于搜索、显示与入库。
 /// </summary>
 public static class ActorNameHelper
 {
-    public const string RoleStage = "stage";
-    public const string RoleKana = "kana";
-    public const string RoleRomaji = "romaji";
-    public const string RoleAlias = "alias";
-
     public sealed class Parts
     {
         public string DisplayName { get; set; }
@@ -46,50 +41,6 @@ public static class ActorNameHelper
         }
 
         return new Parts { DisplayName = value, SearchName = value };
-    }
-
-    /// <summary>
-    /// 按字符组成分类：纯假名 → kana，纯拉丁字母/数字 → romaji，含汉字等其它字符 → stage，
-    /// 混合或空值 → alias。
-    /// </summary>
-    public static string Classify(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return RoleAlias;
-
-        var hasKana = false;
-        var hasLatin = false;
-        var hasOther = false;
-        foreach (var c in name)
-        {
-            if (c == ' ' || c == '\u3000' || c == '・' || c == '.' || c == '-' || c == '\'')
-                continue;
-
-            // 平假名 / 片假名（含长音符 ー）。
-            if (c >= '\u3040' && c <= '\u30ff')
-            {
-                hasKana = true;
-                continue;
-            }
-
-            if ((c >= '0' && c <= '9') ||
-                (c >= 'a' && c <= 'z') ||
-                (c >= 'A' && c <= 'Z'))
-            {
-                hasLatin = true;
-                continue;
-            }
-
-            hasOther = true;
-        }
-
-        if (hasOther)
-            return RoleStage;
-        if (hasKana && !hasLatin)
-            return RoleKana;
-        if (hasLatin && !hasKana)
-            return RoleRomaji;
-        return RoleAlias;
     }
 
     /// <summary>

@@ -4,8 +4,7 @@ using Xunit;
 namespace Jellyfin.Plugin.MetaTube.Tests;
 
 /// <summary>
-/// 演员名拆分与角色分类：括号内是搜索更准确的写法，括号外是显示用的汉字名；
-/// 原始字符串不删改，拆分只用于展示、搜索与入表。
+/// 演员名拆分：A（B）里 B 是搜索用艺名，A 是可能已转好的汉字名；原串不删改。
 /// </summary>
 public class ActorNameHelperTests
 {
@@ -32,18 +31,6 @@ public class ActorNameHelperTests
 
         Assert.Equal(raw, parts.DisplayName);
         Assert.Equal(raw, parts.SearchName);
-    }
-
-    [Theory]
-    [InlineData("ゆい はつみ", "kana")]
-    [InlineData("アイカ", "kana")]
-    [InlineData("Yui Hatsumi", "romaji")]
-    [InlineData("AIKA", "romaji")]
-    [InlineData("柚井初美", "stage")]
-    [InlineData("", "alias")]
-    public void Classify_DetectsNameRole(string name, string role)
-    {
-        Assert.Equal(role, ActorNameHelper.Classify(name));
     }
 
     [Fact]

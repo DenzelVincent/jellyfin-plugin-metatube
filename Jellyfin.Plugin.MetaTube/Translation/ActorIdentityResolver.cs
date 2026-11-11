@@ -51,7 +51,7 @@ public sealed class ResolvedActor
 /// <summary>服务端演员别名表的读写入口。失败时抛异常，由调用方决定是否降级。</summary>
 public interface IActorAliasStore
 {
-    Task<ActorAliasResult> LookupAsync(string name, string targetLang, CancellationToken cancellationToken);
+    Task<ActorAliasResult> LookupAsync(string name, CancellationToken cancellationToken);
 
     Task<ActorAliasResult> SaveAsync(ActorAliasRequest request, CancellationToken cancellationToken);
 }
@@ -157,22 +157,25 @@ public sealed class ActorIdentityResolver
         // A 与 B 不同时，A 直接当作艺名的译名，不再调用翻译引擎。
         var parsedTranslation = string.Equals(surface, stage, StringComparison.Ordinal) ? null : surface;
 
-        var lookup = await LookupAsync(raw, surface, stage, targetLang, cancellationToken, log)
+        var lookup = await LookupAsync(raw, surface, stage, cancellationToken, log)
             .ConfigureAwait(false);
         if (lookup?.Found == true && !lookup.Ambiguous && lookup.Person != null)
         {
-            var translation = lookup.TranslatedName;
+            var translation = lookup.Person.TranslatedName;
             if (string.IsNullOrWhiteSpace(translation))
                 translation = parsedTranslation;
             if (string.IsNullOrWhiteSpace(translation) && translate)
                 translation = await TranslateTextAsync(stage, cancellationToken, log).ConfigureAwait(false);
 
+            var storedStage = string.IsNullOrWhiteSpace(lookup.Person.StageName)
+                ? stage
+                : lookup.Person.StageName.Trim();
             var storedActor = new ResolvedActor
             {
                 RawName = raw,
-                SourceDisplayName = stage,
-                DisplayName = stage,
-                SearchName = stage,
+                SourceDisplayName = storedStage,
+                DisplayName = storedStage,
+                SearchName = storedStage,
                 Provider = lookup.Person.Provider,
                 ActorId = lookup.Person.ActorId,
                 CachedTranslatedName = translation
@@ -180,9 +183,9 @@ public sealed class ActorIdentityResolver
 
             // 命中表但还没有译名（本次翻译出了结果）时补写，下一部影片直接复用。
             if (translate && storedActor.HasIdentity && !string.IsNullOrWhiteSpace(translation) &&
-                !string.Equals(translation, lookup.TranslatedName, StringComparison.Ordinal))
+                !string.Equals(translation, lookup.Person.TranslatedName, StringComparison.Ordinal))
             {
-                await SaveAsync(BuildTranslationRequest(storedActor, translation, targetLang),
+                await SaveAsync(BuildTranslationRequest(storedActor, translation),
                     cancellationToken, log).ConfigureAwait(false);
             }
 
@@ -224,15 +227,15 @@ public sealed class ActorIdentityResolver
 
         if (actor.HasIdentity && !IsStoreDisabled)
         {
-            var saved = await SaveAsync(BuildSaveRequest(raw, actor, detail, result.Provider,
-                translated, targetLang), cancellationToken, log).ConfigureAwait(false);
+            var saved = await SaveAsync(BuildSaveRequest(actor, result.Provider, translated,
+                parsedTranslation != null ? "source" : "engine"), cancellationToken, log).ConfigureAwait(false);
             if (saved?.Found == true && saved.Person != null)
             {
                 actor.Provider = saved.Person.Provider;
                 actor.ActorId = saved.Person.ActorId;
                 if (string.IsNullOrWhiteSpace(actor.CachedTranslatedName) &&
-                    !string.IsNullOrWhiteSpace(saved.TranslatedName))
-                    actor.CachedTranslatedName = saved.TranslatedName;
+                    !string.IsNullOrWhiteSpace(saved.Person.TranslatedName))
+                    actor.CachedTranslatedName = saved.Person.TranslatedName;
             }
         }
 
@@ -240,7 +243,7 @@ public sealed class ActorIdentityResolver
     }
 
     private async Task<ActorAliasResult> LookupAsync(string raw, string display,
-        string search, string targetLang, CancellationToken cancellationToken, Action<string> log)
+        string search, CancellationToken cancellationToken, Action<string> log)
     {
         if (IsStoreDisabled)
             return null;
@@ -253,7 +256,7 @@ public sealed class ActorIdentityResolver
         {
             try
             {
-                var result = await _store.LookupAsync(candidate, targetLang, cancellationToken)
+                var result = await _store.LookupAsync(candidate, cancellationToken)
                     .ConfigureAwait(false);
                 if (result?.Found == true)
                 {
@@ -511,56 +514,30 @@ public sealed class ActorIdentityResolver
         }
     }
 
-    private static ActorAliasRequest BuildSaveRequest(string raw, ResolvedActor actor,
-        ActorInfo detail, string sourceProvider, string translated, string targetLang)
+    private static ActorAliasRequest BuildSaveRequest(ResolvedActor actor, string sourceProvider,
+        string translated, string translationSource)
     {
-        var names = new List<ActorAliasNameInfo>();
-
-        void Add(string name, string role)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-                return;
-            name = name.Trim();
-            if (names.Any(item => item.Name == name && item.Role == role))
-                return;
-            names.Add(new ActorAliasNameInfo { Name = name, Role = role });
-        }
-
-        Add(raw, ActorNameHelper.RoleAlias);
-        // B 是搜索用的艺名：按字符组成落到 stage / kana / romaji。
-        Add(actor.SourceDisplayName, ActorNameHelper.Classify(actor.SourceDisplayName));
-
-        if (detail != null)
-        {
-            Add(detail.Name, ActorNameHelper.RoleStage);
-            foreach (var alias in detail.Aliases ?? Array.Empty<string>())
-                Add(alias, ActorNameHelper.Classify(alias));
-        }
-
         return new ActorAliasRequest
         {
-            DisplayName = actor.SourceDisplayName,
+            StageName = actor.SourceDisplayName,
+            TranslatedName = translated,
+            TranslationSource = translationSource,
             Provider = actor.Provider,
             ActorId = actor.ActorId,
-            Source = sourceProvider,
-            Names = names.ToArray(),
-            Translation = string.IsNullOrWhiteSpace(translated)
-                ? null
-                : new ActorAliasTranslationInfo { Lang = targetLang, Text = translated }
+            Source = sourceProvider
         };
     }
 
-    private static ActorAliasRequest BuildTranslationRequest(ResolvedActor actor, string translated,
-        string targetLang)
+    private static ActorAliasRequest BuildTranslationRequest(ResolvedActor actor, string translated)
     {
         return new ActorAliasRequest
         {
-            DisplayName = actor.SourceDisplayName,
+            StageName = actor.SourceDisplayName,
+            TranslatedName = translated,
+            TranslationSource = "engine",
             Provider = actor.Provider,
             ActorId = actor.ActorId,
-            Source = "lookup",
-            Names = Array.Empty<ActorAliasNameInfo>(),
-            Translation = new ActorAliasTranslationInfo { Lang = targetLang, Text = translated }
+            Source = "lookup"
         };
     }
 
@@ -592,9 +569,9 @@ public sealed class ActorIdentityResolver
 /// <summary>把别名表接到 ApiClient；失败原样抛出，由 ActorIdentityResolver 降级。</summary>
 internal sealed class ServerActorAliasStore : IActorAliasStore
 {
-    public Task<ActorAliasResult> LookupAsync(string name, string targetLang, CancellationToken cancellationToken)
+    public Task<ActorAliasResult> LookupAsync(string name, CancellationToken cancellationToken)
     {
-        return ApiClient.LookupActorAliasAsync(name, targetLang, cancellationToken);
+        return ApiClient.LookupActorAliasAsync(name, cancellationToken);
     }
 
     public Task<ActorAliasResult> SaveAsync(ActorAliasRequest request, CancellationToken cancellationToken)

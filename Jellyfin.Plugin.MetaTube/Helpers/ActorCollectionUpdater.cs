@@ -140,15 +140,15 @@ public sealed class ActorCollectionUpdater
         try
         {
             var alias = await ApiClient
-                .LookupActorAliasAsync(peopleName, TranslationHelper.TargetLanguage, cancellationToken)
+                .LookupActorAliasAsync(peopleName, cancellationToken)
                 .ConfigureAwait(false);
             if (alias?.Found == true && !alias.Ambiguous)
             {
-                var translated = Plugin.Instance.Configuration.TranslateActor ? alias.TranslatedName : null;
+                var translated = Plugin.Instance.Configuration.TranslateActor ? alias.Person?.TranslatedName : null;
                 if (!string.IsNullOrWhiteSpace(translated))
                     name = translated.Trim();
-                else if (!string.IsNullOrWhiteSpace(alias.Person?.DisplayName))
-                    name = alias.Person.DisplayName.Trim();
+                else if (!string.IsNullOrWhiteSpace(alias.Person?.StageName))
+                    name = alias.Person.StageName.Trim();
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
