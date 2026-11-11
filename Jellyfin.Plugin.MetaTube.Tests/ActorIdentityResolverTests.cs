@@ -146,6 +146,94 @@ public class ActorIdentityResolverTests
     }
 
     [Fact]
+    public async Task PrefersRichActorProviderOverServerOrder()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "Gfriends", Id = "gf", Name = "柚井初美", Images = new[] { "http://img/gf.jpg" } },
+                new() { Provider = "MINNANO", Id = "42", Name = "柚井初美" }
+            }
+        };
+        directory.Details["Gfriends:gf"] = new ActorInfo
+        {
+            Provider = "Gfriends",
+            Id = "gf",
+            Name = "gf",
+            Images = new[] { "http://img/gf.jpg" }
+        };
+        directory.Details["MINNANO:42"] = new ActorInfo
+        {
+            Provider = "MINNANO",
+            Id = "42",
+            Name = "柚井初美",
+            Aliases = new[] { "ゆい はつみ", "Yui Hatsumi" }
+        };
+        var resolver = new ActorIdentityResolver(store, directory, new FakeTranslator());
+
+        var actors = await resolver.ResolveAllAsync(new[] { "柚井初美" }, false, "zh-CN", CancellationToken.None);
+
+        var actor = Assert.Single(actors);
+        Assert.Equal("MINNANO:42", actor.IdentityKey);
+        var saved = Assert.Single(store.Saved);
+        Assert.Equal("MINNANO", saved.Provider);
+        Assert.Contains(saved.Names, n => n.Name == "ゆい はつみ" && n.Role == "kana");
+        Assert.Contains(saved.Names, n => n.Name == "Yui Hatsumi" && n.Role == "romaji");
+    }
+
+    [Fact]
+    public async Task PrefersCjkNameWithinSameProvider()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "MINNANO", Id = "1", Name = "ゆい はつみ" },
+                new() { Provider = "MINNANO", Id = "2", Name = "柚井初美" }
+            }
+        };
+        directory.Details["MINNANO:1"] = new ActorInfo { Provider = "MINNANO", Id = "1", Name = "ゆい はつみ" };
+        directory.Details["MINNANO:2"] = new ActorInfo { Provider = "MINNANO", Id = "2", Name = "柚井初美" };
+        var resolver = new ActorIdentityResolver(store, directory, new FakeTranslator());
+
+        var actors = await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, false, "zh-CN",
+            CancellationToken.None);
+
+        Assert.Equal("MINNANO:2", Assert.Single(actors).IdentityKey);
+    }
+
+    [Fact]
+    public async Task FallsBackToNextCandidateWhenNameDoesNotMatch()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "MINNANO", Id = "bad", Name = "别人" },
+                new() { Provider = "AVBASE", Id = "good", Name = "柚井初美" }
+            }
+        };
+        directory.Details["MINNANO:bad"] = new ActorInfo { Provider = "MINNANO", Id = "bad", Name = "别人" };
+        directory.Details["AVBASE:good"] = new ActorInfo
+        {
+            Provider = "AVBASE",
+            Id = "good",
+            Name = "柚井初美",
+            Aliases = new[] { "ゆい はつみ" }
+        };
+        var resolver = new ActorIdentityResolver(store, directory, new FakeTranslator());
+
+        var actors = await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, false, "zh-CN",
+            CancellationToken.None);
+
+        Assert.Equal("AVBASE:good", Assert.Single(actors).IdentityKey);
+    }
+
+    [Fact]
     public async Task MissingActorKeepsParsedDisplayWithoutSaving()
     {
         var store = new FakeStore();
@@ -234,6 +322,7 @@ public class ActorIdentityResolverTests
     {
         public List<ActorSearchResult> SearchResults { get; set; } = new();
         public ActorInfo Detail { get; set; }
+        public Dictionary<string, ActorInfo> Details { get; } = new(StringComparer.OrdinalIgnoreCase);
         public int SearchCalls { get; private set; }
 
         public Task<List<ActorSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
@@ -244,6 +333,8 @@ public class ActorIdentityResolverTests
 
         public Task<ActorInfo> GetAsync(string provider, string id, CancellationToken cancellationToken)
         {
+            if (Details.TryGetValue(provider + ":" + id, out var detail))
+                return Task.FromResult(detail);
             return Task.FromResult(Detail);
         }
     }

@@ -308,8 +308,8 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         {
             var provider = resolved.Provider;
             var actorId = resolved.ActorId;
-            var imageUrl = resolved.ImageUrl;
-            string gfriendsUrl = null;
+            var imageUrl = BuildImageUrl(resolved.ImageSource);
+            var gfriendsUrl = BuildImageUrl(resolved.GfriendsImageSource);
 
             // 别名表没给出 pid 时才搜索：搜索同时提供 Gfriends 头像兜底。
             if (!resolved.HasIdentity)
@@ -368,6 +368,13 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         {
             Logger.Error("Get actor image error: {0} ({1})", resolved.SearchName, e.Message);
         }
+    }
+
+    private static string BuildImageUrl(ActorImageSource source)
+    {
+        if (source == null || string.IsNullOrWhiteSpace(source.Path))
+            return null;
+        return ApiClient.GetPrimaryImageApiUrl(source.Provider, source.Id, source.Path, 0.5, true);
     }
 
     private async Task ConvertToRealActorNames(MovieSearchResult m, CancellationToken cancellationToken)

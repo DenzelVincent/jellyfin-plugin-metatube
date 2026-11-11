@@ -1,8 +1,19 @@
 using System.Collections.Concurrent;
+using System.Text;
 using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Metadata;
 
 namespace Jellyfin.Plugin.MetaTube.Translation;
+
+/// <summary>头像来源：provider + id + 原始图片地址（URL 由调用方按服务端规则拼）。</summary>
+public sealed class ActorImageSource
+{
+    public string Provider { get; set; }
+
+    public string Id { get; set; }
+
+    public string Path { get; set; }
+}
 
 /// <summary>一次解析得到的演员：显示名、搜索名与来源 pid。</summary>
 public sealed class ResolvedActor
@@ -21,8 +32,11 @@ public sealed class ResolvedActor
 
     public string ActorId { get; set; }
 
-    /// <summary>搜索阶段拿到的首选头像（如 Gfriends），详情接口的图会先应用、它最后覆盖。</summary>
-    public string ImageUrl { get; set; }
+    /// <summary>搜索阶段拿到的首选头像；详情接口的图会先应用、它最后覆盖。</summary>
+    public ActorImageSource ImageSource { get; set; }
+
+    /// <summary>Gfriends 头像兜底（搜索结果里带图时才有）。</summary>
+    public ActorImageSource GfriendsImageSource { get; set; }
 
     internal string CachedTranslatedName { get; set; }
 
@@ -162,8 +176,8 @@ public sealed class ActorIdentityResolver
         }
 
         // 表未命中（或歧义）：走演员搜索 + 详情，把名字学进表。
-        var result = await SearchFirstAsync(search, display, cancellationToken, log).ConfigureAwait(false);
-        if (result == null)
+        var match = await SearchBestAsync(search, display, cancellationToken, log).ConfigureAwait(false);
+        if (match == null)
         {
             log($"Actor not found: {search}, keep original name");
             return new ResolvedActor
@@ -175,21 +189,8 @@ public sealed class ActorIdentityResolver
             };
         }
 
-        ActorInfo detail = null;
-        try
-        {
-            detail = await _directory.GetAsync(result.Provider, result.Id, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception e)
-        {
-            log($"Get actor info failed: {result.Provider}:{result.Id} ({e.Message})");
-        }
-
+        var result = match.Result;
+        var detail = match.Detail;
         var canonical = detail?.Name?.Trim();
         if (!string.IsNullOrWhiteSpace(canonical))
             display = canonical;
@@ -206,7 +207,8 @@ public sealed class ActorIdentityResolver
             SearchName = search,
             Provider = detail?.Provider ?? result.Provider,
             ActorId = detail?.Id ?? result.Id,
-            ImageUrl = FirstImageUrl(result),
+            ImageSource = match.Image,
+            GfriendsImageSource = match.GfriendsImage,
             CachedTranslatedName = translated
         };
 
@@ -268,16 +270,46 @@ public sealed class ActorIdentityResolver
         return null;
     }
 
-    private async Task<ActorSearchResult> SearchFirstAsync(string search, string display,
-        CancellationToken cancellationToken, Action<string> log)
+    // 身份来源按演员数据质量排序：MINNANO 有汉字/假名/拼音/别名，AVBASE 有真实姓名，
+    // Gfriends 只有图片（详情里的图服务端会另行注入），所以只作最后兜底。
+    private const string Gfriends = "Gfriends";
+
+    private static readonly string[] ActorProviderPreference =
     {
-        foreach (var query in new[] { search, display }.Distinct(StringComparer.OrdinalIgnoreCase))
+        "MINNANO", "AVBASE", "AV-LEAGUE", "ThePornDB", Gfriends, "Wikipedia"
+    };
+
+    private const int MaxDetailCandidates = 3;
+
+    /// <summary>
+    /// 在多个来源的搜索结果里挑身份：先按数据质量排序，优先汉字名；再逐个取详情，
+    /// 用 name/aliases 与查询名做匹配校验。都校验不上时退回排序第一的候选并记日志。
+    /// </summary>
+    private sealed class ActorSearchMatch
+    {
+        public ActorSearchResult Result { get; set; }
+
+        public ActorInfo Detail { get; set; }
+
+        public ActorImageSource Image { get; set; }
+
+        public ActorImageSource GfriendsImage { get; set; }
+    }
+
+    private async Task<ActorSearchMatch> SearchBestAsync(
+        string search, string display, CancellationToken cancellationToken, Action<string> log)
+    {
+        var queries = new[] { search, display }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var query in queries)
         {
+            List<ActorSearchResult> results;
             try
             {
-                var results = await _directory.SearchAsync(query, cancellationToken).ConfigureAwait(false);
-                if (results?.Any() == true)
-                    return results.First();
+                results = await _directory.SearchAsync(query, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -286,10 +318,141 @@ public sealed class ActorIdentityResolver
             catch (Exception e)
             {
                 log($"Search actor failed: {query} ({e.Message})");
+                continue;
+            }
+
+            if (results?.Any() != true)
+                continue;
+
+            var ranked = results
+                .Select((result, index) => new { Result = result, Index = index })
+                .OrderBy(item => ProviderRank(item.Result.Provider))
+                .ThenByDescending(item => ContainsCjk(item.Result.Name))
+                .ThenBy(item => item.Index)
+                .Select(item => item.Result)
+                .ToList();
+
+            var gfriends = results.FirstOrDefault(result =>
+                string.Equals(result.Provider, Gfriends, StringComparison.OrdinalIgnoreCase) &&
+                result.Images?.Any() == true);
+            var gfriendsImage = ToImageSource(gfriends);
+
+            ActorSearchResult fallbackResult = null;
+            ActorInfo fallbackDetail = null;
+            foreach (var candidate in ranked.Take(MaxDetailCandidates))
+            {
+                ActorInfo detail;
+                try
+                {
+                    detail = await _directory.GetAsync(candidate.Provider, candidate.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    log($"Get actor info failed: {candidate.Provider}:{candidate.Id} ({e.Message})");
+                    continue;
+                }
+
+                if (detail == null)
+                    continue;
+
+                fallbackResult ??= candidate;
+                fallbackDetail ??= detail;
+
+                if (queries.Any(name => MatchesDetail(detail, name)))
+                {
+                    return new ActorSearchMatch
+                    {
+                        Result = candidate,
+                        Detail = detail,
+                        Image = ToImageSource(candidate),
+                        GfriendsImage = gfriendsImage
+                    };
+                }
+            }
+
+            if (fallbackResult != null)
+            {
+                log($"No verified actor match: {query}, use {fallbackResult.Provider}:{fallbackResult.Id}");
+                return new ActorSearchMatch
+                {
+                    Result = fallbackResult,
+                    Detail = fallbackDetail,
+                    Image = ToImageSource(fallbackResult),
+                    GfriendsImage = gfriendsImage
+                };
             }
         }
 
         return null;
+    }
+
+    private static int ProviderRank(string provider)
+    {
+        for (var i = 0; i < ActorProviderPreference.Length; i++)
+        {
+            if (string.Equals(ActorProviderPreference[i], provider, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return ActorProviderPreference.Length;
+    }
+
+    private static bool ContainsCjk(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+        foreach (var c in name)
+        {
+            if ((c >= '\u3400' && c <= '\u9fff') || (c >= '\uf900' && c <= '\ufaff'))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool MatchesDetail(ActorInfo detail, string query)
+    {
+        var key = NormalizeName(query);
+        if (key.Length == 0)
+            return false;
+        if (NormalizeName(detail.Name) == key)
+            return true;
+        foreach (var alias in detail.Aliases ?? Array.Empty<string>())
+        {
+            if (NormalizeName(alias) == key)
+                return true;
+        }
+        return false;
+    }
+
+    private static string NormalizeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var normalized = name.Normalize(NormalizationForm.FormKC);
+        var builder = new StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (!char.IsWhiteSpace(c))
+                builder.Append(char.ToLowerInvariant(c));
+        }
+        return builder.ToString();
+    }
+
+    private static ActorImageSource ToImageSource(ActorSearchResult result)
+    {
+        if (result?.Images?.Any() != true)
+            return null;
+        return new ActorImageSource
+        {
+            Provider = result.Provider,
+            Id = result.Id,
+            Path = result.Images.First()
+        };
     }
 
     private async Task<ActorAliasResult> SaveAsync(ActorAliasRequest request, CancellationToken cancellationToken,
@@ -382,13 +545,6 @@ public sealed class ActorIdentityResolver
         };
     }
 
-    private static string FirstImageUrl(ActorSearchResult result)
-    {
-        if (result?.Images?.Any() != true)
-            return null;
-        return ApiClient.GetPrimaryImageApiUrl(result.Provider, result.Id, result.Images.First(), 0.5, true);
-    }
-
     private static ResolvedActor Clone(ResolvedActor actor)
     {
         return new ResolvedActor
@@ -399,7 +555,8 @@ public sealed class ActorIdentityResolver
             SearchName = actor.SearchName,
             Provider = actor.Provider,
             ActorId = actor.ActorId,
-            ImageUrl = actor.ImageUrl,
+            ImageSource = actor.ImageSource,
+            GfriendsImageSource = actor.GfriendsImageSource,
             CachedTranslatedName = actor.CachedTranslatedName
         };
     }
