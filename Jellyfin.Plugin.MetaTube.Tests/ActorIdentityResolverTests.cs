@@ -23,7 +23,7 @@ public class ActorIdentityResolverTests
             CancellationToken.None);
 
         var actor = Assert.Single(actors);
-        Assert.Equal("柚井初美", actor.DisplayName);
+        Assert.Equal("柚井初美（ゆい はつみ）", actor.DisplayName);
         Assert.Equal("MINNANO:7", actor.IdentityKey);
         Assert.Equal(0, directory.SearchCalls);
         Assert.Equal(0, store.SaveCalls);
@@ -49,7 +49,7 @@ public class ActorIdentityResolverTests
             CancellationToken.None);
 
         var actor = Assert.Single(actors);
-        Assert.Equal("柚井初美", actor.DisplayName);
+        Assert.Equal("柚井初美（ゆい はつみ）", actor.DisplayName);
         Assert.Equal("MINNANO:42", actor.IdentityKey);
         Assert.Equal(0, translator.Calls);
 
@@ -148,7 +148,7 @@ public class ActorIdentityResolverTests
         var actors = await resolver.ResolveAllAsync(new[] { "あ", "い" }, true, "zh-CN",
             CancellationToken.None);
 
-        Assert.Equal(new[] { "同名", "乙" }, actors.Select(actor => actor.DisplayName));
+        Assert.Equal(new[] { "同名（甲）", "同名（乙）" }, actors.Select(actor => actor.DisplayName));
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class ActorIdentityResolverTests
         var actors = await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, true, "zh-CN",
             CancellationToken.None);
 
-        Assert.Equal("柚井初美", Assert.Single(actors).DisplayName);
+        Assert.Equal("柚井初美（ゆい はつみ）", Assert.Single(actors).DisplayName);
         Assert.Equal(0, translator.Calls);
 
         var saved = Assert.Single(store.Saved);
@@ -236,7 +236,7 @@ public class ActorIdentityResolverTests
         var actors = await resolver.ResolveAllAsync(new[] { "ゆい はつみ" }, true, "zh-CN",
             CancellationToken.None);
 
-        Assert.Equal("柚井初美", Assert.Single(actors).DisplayName);
+        Assert.Equal("柚井初美（ゆい はつみ）", Assert.Single(actors).DisplayName);
         Assert.Equal(1, translator.Calls);
         var saved = Assert.Single(store.Saved);
         Assert.Equal("柚井初美", saved.TranslatedName);

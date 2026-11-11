@@ -33,6 +33,17 @@ public class ActorNameHelperTests
         Assert.Equal(raw, parts.SearchName);
     }
 
+    [Theory]
+    [InlineData("ゆい はつみ", "柚井初美", "柚井初美（ゆい はつみ）")]
+    [InlineData("ゆい はつみ", "", "ゆい はつみ")]
+    [InlineData("ゆい はつみ", "ゆい はつみ", "ゆい はつみ")]
+    [InlineData("ゆい はつみ", "柚井初美（ゆい はつみ）", "柚井初美（ゆい はつみ）")]
+    [InlineData("", "柚井初美", "柚井初美")]
+    public void FormatDisplay_ShowsTranslationWithStage(string stage, string translated, string expected)
+    {
+        Assert.Equal(expected, ActorNameHelper.FormatDisplay(stage, translated));
+    }
+
     [Fact]
     public void ResolveTranslatedCollisions_KeepsOriginalForLaterDuplicate()
     {

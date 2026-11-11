@@ -44,6 +44,26 @@ public static class ActorNameHelper
     }
 
     /// <summary>
+    /// 页面/合集显示名：有译名时显示「译名（艺名）」，便于发现误译；没有译名或两者相同
+    /// 时只显示艺名。艺名已包含在译名里（如 A（B）原样译回）时不再重复拼接。
+    /// </summary>
+    public static string FormatDisplay(string stageName, string translatedName)
+    {
+        var stage = (stageName ?? string.Empty).Trim();
+        var translated = (translatedName ?? string.Empty).Trim();
+
+        if (translated.Length == 0)
+            return stage;
+        if (stage.Length == 0)
+            return translated;
+        if (string.Equals(translated, stage, StringComparison.Ordinal) ||
+            translated.IndexOf(stage, StringComparison.Ordinal) >= 0)
+            return translated;
+
+        return $"{translated}（{stage}）";
+    }
+
+    /// <summary>
     /// 不同演员译成同一个名字时，后出现的那位回退为原名，避免 Jellyfin 按名字合并。
     /// 原名也已被占用时只能保留译文（此时合并无法避免）。
     /// </summary>

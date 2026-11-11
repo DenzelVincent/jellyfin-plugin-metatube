@@ -222,8 +222,11 @@ public sealed class ActorIdentityResolver
 
         var actor = Clone(cached);
         if (translate)
-            actor.DisplayName = await TranslateAsync(actor, targetLang, cancellationToken, log)
+        {
+            var translated = await TranslateAsync(actor, targetLang, cancellationToken, log)
                 .ConfigureAwait(false);
+            actor.DisplayName = ActorNameHelper.FormatDisplay(actor.SourceDisplayName, translated);
+        }
         return actor;
     }
 
