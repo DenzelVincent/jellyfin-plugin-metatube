@@ -108,7 +108,7 @@ public class ActorIdentityResolverTests
             CancellationToken.None, logs.Add);
 
         var actor = Assert.Single(actors);
-        Assert.Equal("柚井初美", actor.DisplayName);
+        Assert.Equal("ゆい はつみ", actor.DisplayName);
         Assert.False(actor.HasIdentity);
         Assert.Equal(0, store.SaveCalls);
         Assert.Contains(logs, message => message.StartsWith("Actor alias is ambiguous"));
@@ -139,10 +139,10 @@ public class ActorIdentityResolverTests
         var translator = new FakeTranslator("同名");
         var resolver = new ActorIdentityResolver(store, new FakeDirectory(), translator);
 
-        var actors = await resolver.ResolveAllAsync(new[] { "甲（あ）", "乙（い）" }, true, "zh-CN",
+        var actors = await resolver.ResolveAllAsync(new[] { "あ", "い" }, true, "zh-CN",
             CancellationToken.None);
 
-        Assert.Equal(new[] { "同名", "乙" }, actors.Select(actor => actor.DisplayName));
+        Assert.Equal(new[] { "同名", "い" }, actors.Select(actor => actor.DisplayName));
     }
 
     [Fact]
@@ -244,10 +244,89 @@ public class ActorIdentityResolverTests
             CancellationToken.None);
 
         var actor = Assert.Single(actors);
-        Assert.Equal("无名", actor.DisplayName);
+        Assert.Equal("むめい", actor.DisplayName);
         Assert.Equal("むめい", actor.SearchName);
         Assert.False(actor.HasIdentity);
         Assert.Equal(0, store.SaveCalls);
+    }
+
+    [Fact]
+    public async Task ParsedChineseNameIsStoredAsTranslationWithoutEngineCall()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "MINNANO", Id = "42", Name = "柚井初美" }
+            },
+            Detail = new ActorInfo { Provider = "MINNANO", Id = "42", Name = "柚井初美" }
+        };
+        var translator = new FakeTranslator("引擎译名");
+        var resolver = new ActorIdentityResolver(store, directory, translator);
+
+        var actors = await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, true, "zh-CN",
+            CancellationToken.None);
+
+        var actor = Assert.Single(actors);
+        Assert.Equal("柚井初美", actor.DisplayName);
+        Assert.Equal(0, translator.Calls);
+
+        var saved = Assert.Single(store.Saved);
+        Assert.NotNull(saved.Translation);
+        Assert.Equal("柚井初美", saved.Translation.Text);
+        Assert.Contains(saved.Names, n => n.Name == "ゆい はつみ" && n.Role == "kana");
+    }
+
+    [Fact]
+    public async Task ParsedChineseNameIsStoredEvenWhenTranslationOff()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "MINNANO", Id = "42", Name = "柚井初美" }
+            },
+            Detail = new ActorInfo { Provider = "MINNANO", Id = "42", Name = "柚井初美" }
+        };
+        var translator = new FakeTranslator("引擎译名");
+        var resolver = new ActorIdentityResolver(store, directory, translator);
+
+        var actors = await resolver.ResolveAllAsync(new[] { "柚井初美（ゆい はつみ）" }, false, "zh-CN",
+            CancellationToken.None);
+
+        var actor = Assert.Single(actors);
+        Assert.Equal("ゆい はつみ", actor.DisplayName);
+        Assert.Equal(0, translator.Calls);
+
+        var saved = Assert.Single(store.Saved);
+        Assert.NotNull(saved.Translation);
+        Assert.Equal("柚井初美", saved.Translation.Text);
+    }
+
+    [Fact]
+    public async Task MissingParsedNameUsesEngineTranslation()
+    {
+        var store = new FakeStore();
+        var directory = new FakeDirectory
+        {
+            SearchResults = new List<ActorSearchResult>
+            {
+                new() { Provider = "MINNANO", Id = "42", Name = "ゆい はつみ" }
+            },
+            Detail = new ActorInfo { Provider = "MINNANO", Id = "42", Name = "ゆい はつみ" }
+        };
+        var translator = new FakeTranslator("柚井初美");
+        var resolver = new ActorIdentityResolver(store, directory, translator);
+
+        var actors = await resolver.ResolveAllAsync(new[] { "ゆい はつみ" }, true, "zh-CN",
+            CancellationToken.None);
+
+        var actor = Assert.Single(actors);
+        Assert.Equal("柚井初美", actor.DisplayName);
+        Assert.Equal(1, translator.Calls);
+        Assert.Equal("柚井初美", Assert.Single(store.Saved).Translation.Text);
     }
 
     [Fact]

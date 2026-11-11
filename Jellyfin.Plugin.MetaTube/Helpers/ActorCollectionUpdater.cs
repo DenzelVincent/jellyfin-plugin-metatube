@@ -1,5 +1,7 @@
 #if !__EMBY__
 using Jellyfin.Plugin.MetaTube.Extensions;
+using Jellyfin.Plugin.MetaTube.Metadata;
+using Jellyfin.Plugin.MetaTube.Translation;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -20,6 +22,10 @@ public sealed class ActorCollectionUpdater
     private readonly ICollectionManager _collectionManager;
     private readonly IProviderManager _providerManager;
     private readonly ILogger _logger;
+
+    // 合集名以演员表为准：同一轮里同一位演员只查一次；旧服务端不支持时只试一次。
+    private readonly Dictionary<string, string> _collectionNames = new(StringComparer.OrdinalIgnoreCase);
+    private bool _aliasNameLookupDisabled;
 
     public ActorCollectionUpdater(ILibraryManager libraryManager, ICollectionManager collectionManager,
         IProviderManager providerManager, ILogger logger)
@@ -117,6 +123,52 @@ public sealed class ActorCollectionUpdater
         }
     }
 
+    /// <summary>
+    /// 合集名以演员表为准：按影片里的显示名查别名表，开启演员翻译时取译名，
+    /// 否则取表里的规范显示名；旧服务端或查询失败时退回影片里的显示名。
+    /// 只在新建合集时调用，同一轮同一位演员只查一次。
+    /// </summary>
+    private async Task<string> ResolveCollectionNameAsync(string peopleName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(peopleName) || _aliasNameLookupDisabled)
+            return peopleName;
+
+        if (_collectionNames.TryGetValue(peopleName, out var cached))
+            return cached;
+
+        var name = peopleName;
+        try
+        {
+            var alias = await ApiClient
+                .LookupActorAliasAsync(peopleName, TranslationHelper.TargetLanguage, cancellationToken)
+                .ConfigureAwait(false);
+            if (alias?.Found == true && !alias.Ambiguous)
+            {
+                var translated = Plugin.Instance.Configuration.TranslateActor ? alias.TranslatedName : null;
+                if (!string.IsNullOrWhiteSpace(translated))
+                    name = translated.Trim();
+                else if (!string.IsNullOrWhiteSpace(alias.Person?.DisplayName))
+                    name = alias.Person.DisplayName.Trim();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (ActorAliasApiUnavailableException e)
+        {
+            _aliasNameLookupDisabled = true;
+            _logger.Debug("Actor alias API unavailable, use people names for collections: {0}", e.Message);
+        }
+        catch (Exception e)
+        {
+            _logger.Debug("Resolve actor collection name failed: {0} ({1})", peopleName, e.Message);
+        }
+
+        _collectionNames[peopleName] = name;
+        return name;
+    }
+
     private async Task<ActorCollectionSync.SyncAction> ApplyAsync(ActorCollectionSync.SyncPlan plan,
         CancellationToken cancellationToken)
     {
@@ -145,20 +197,24 @@ public sealed class ActorCollectionUpdater
 
         if (plan.Action == ActorCollectionSync.SyncAction.Create)
         {
+            // 合集名以演员表为准：优先用表里的译名（开启演员翻译时），否则用规范显示名。
+            var collectionName = await ResolveCollectionNameAsync(plan.Name, cancellationToken)
+                .ConfigureAwait(false);
+
             var box = await _collectionManager.CreateCollectionAsync(new CollectionCreationOptions
             {
-                Name = plan.Name,
+                Name = collectionName,
                 // ItemIdList 是字符串形式的 Guid（设计第 3 节反射实测）。
                 ItemIdList = plan.AddItemIds.Select(id => id.ToString()).ToList(),
                 ProviderIds = BuildProviderIds(plan)
             }).ConfigureAwait(false);
 
-            _logger.Info("Create actor collection: {0} ({1} movies)", plan.Name, plan.AddItemIds.Count);
+            _logger.Info("Create actor collection: {0} ({1} movies)", collectionName, plan.AddItemIds.Count);
 
             // 「pid 缺失」的另一种（设计 4.5）：这位演员一条 pid 都没刮到，合集建得出来、封面解析不了。
             // 只在建立时记一次，避免每轮对齐都刷屏。
             if (string.IsNullOrEmpty(plan.ActorId))
-                _logger.Warn("Created actor collection without actor pid: {0}", plan.Name);
+                _logger.Warn("Created actor collection without actor pid: {0}", collectionName);
 
             // 不把服务端对 ItemIdList 的处理当唯一依据：成员数对不上就补一次，本身幂等。
             // LinkedChildren 可能为 null，口径与 ReadCollections 一致。

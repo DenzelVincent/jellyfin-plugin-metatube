@@ -151,60 +151,70 @@ public sealed class ActorIdentityResolver
         CancellationToken cancellationToken, Action<string> log)
     {
         var parts = ActorNameHelper.Parse(raw);
-        var display = string.IsNullOrWhiteSpace(parts.DisplayName) ? raw.Trim() : parts.DisplayName;
-        var search = string.IsNullOrWhiteSpace(parts.SearchName) ? display : parts.SearchName;
+        // B：搜索用的艺名（含假名写法）；A：数据源可能已转换好的汉字名。
+        var stage = !string.IsNullOrWhiteSpace(parts.SearchName) ? parts.SearchName.Trim() : raw.Trim();
+        var surface = string.IsNullOrWhiteSpace(parts.DisplayName) ? stage : parts.DisplayName.Trim();
+        // A 与 B 不同时，A 直接当作艺名的译名，不再调用翻译引擎。
+        var parsedTranslation = string.Equals(surface, stage, StringComparison.Ordinal) ? null : surface;
 
-        var lookup = await LookupAsync(raw, parts, display, search, targetLang, cancellationToken, log)
+        var lookup = await LookupAsync(raw, surface, stage, targetLang, cancellationToken, log)
             .ConfigureAwait(false);
         if (lookup?.Found == true && !lookup.Ambiguous && lookup.Person != null)
         {
+            var translation = lookup.TranslatedName;
+            if (string.IsNullOrWhiteSpace(translation))
+                translation = parsedTranslation;
+            if (string.IsNullOrWhiteSpace(translation) && translate)
+                translation = await TranslateTextAsync(stage, cancellationToken, log).ConfigureAwait(false);
+
             var storedActor = new ResolvedActor
             {
                 RawName = raw,
-                SourceDisplayName = string.IsNullOrWhiteSpace(lookup.Person.DisplayName)
-                    ? display
-                    : lookup.Person.DisplayName,
-                DisplayName = string.IsNullOrWhiteSpace(lookup.Person.DisplayName)
-                    ? display
-                    : lookup.Person.DisplayName,
-                SearchName = search,
+                SourceDisplayName = stage,
+                DisplayName = stage,
+                SearchName = stage,
                 Provider = lookup.Person.Provider,
                 ActorId = lookup.Person.ActorId,
-                CachedTranslatedName = lookup.TranslatedName
+                CachedTranslatedName = translation
             };
+
+            // 命中表但还没有译名（本次翻译出了结果）时补写，下一部影片直接复用。
+            if (translate && storedActor.HasIdentity && !string.IsNullOrWhiteSpace(translation) &&
+                !string.Equals(translation, lookup.TranslatedName, StringComparison.Ordinal))
+            {
+                await SaveAsync(BuildTranslationRequest(storedActor, translation, targetLang),
+                    cancellationToken, log).ConfigureAwait(false);
+            }
+
             return storedActor;
         }
 
         // 表未命中（或歧义）：走演员搜索 + 详情，把名字学进表。
-        var match = await SearchBestAsync(search, display, cancellationToken, log).ConfigureAwait(false);
+        var match = await SearchBestAsync(stage, surface, cancellationToken, log).ConfigureAwait(false);
         if (match == null)
         {
-            log($"Actor not found: {search}, keep original name");
+            log($"Actor not found: {stage}, keep original name");
             return new ResolvedActor
             {
                 RawName = raw,
-                SourceDisplayName = display,
-                DisplayName = display,
-                SearchName = search
+                SourceDisplayName = stage,
+                DisplayName = stage,
+                SearchName = stage
             };
         }
 
         var result = match.Result;
         var detail = match.Detail;
-        var canonical = detail?.Name?.Trim();
-        if (!string.IsNullOrWhiteSpace(canonical))
-            display = canonical;
-
-        var translated = translate
-            ? await TranslateTextAsync(display, cancellationToken, log).ConfigureAwait(false)
-            : null;
+        var translated = parsedTranslation;
+        if (string.IsNullOrWhiteSpace(translated) && translate)
+            translated = await TranslateTextAsync(stage, cancellationToken, log).ConfigureAwait(false);
 
         var actor = new ResolvedActor
         {
             RawName = raw,
-            SourceDisplayName = display,
-            DisplayName = display,
-            SearchName = search,
+            SourceDisplayName = stage,
+            DisplayName = stage,
+            SearchName = stage,
             Provider = detail?.Provider ?? result.Provider,
             ActorId = detail?.Id ?? result.Id,
             ImageSource = match.Image,
@@ -214,18 +224,14 @@ public sealed class ActorIdentityResolver
 
         if (actor.HasIdentity && !IsStoreDisabled)
         {
-            var saved = await SaveAsync(BuildSaveRequest(raw, parts, actor, detail, result.Provider,
+            var saved = await SaveAsync(BuildSaveRequest(raw, actor, detail, result.Provider,
                 translated, targetLang), cancellationToken, log).ConfigureAwait(false);
             if (saved?.Found == true && saved.Person != null)
             {
                 actor.Provider = saved.Person.Provider;
                 actor.ActorId = saved.Person.ActorId;
-                if (!string.IsNullOrWhiteSpace(saved.Person.DisplayName))
-                {
-                    actor.SourceDisplayName = saved.Person.DisplayName;
-                    actor.DisplayName = saved.Person.DisplayName;
-                }
-                if (!string.IsNullOrWhiteSpace(saved.TranslatedName))
+                if (string.IsNullOrWhiteSpace(actor.CachedTranslatedName) &&
+                    !string.IsNullOrWhiteSpace(saved.TranslatedName))
                     actor.CachedTranslatedName = saved.TranslatedName;
             }
         }
@@ -233,7 +239,7 @@ public sealed class ActorIdentityResolver
         return actor;
     }
 
-    private async Task<ActorAliasResult> LookupAsync(string raw, ActorNameHelper.Parts parts, string display,
+    private async Task<ActorAliasResult> LookupAsync(string raw, string display,
         string search, string targetLang, CancellationToken cancellationToken, Action<string> log)
     {
         if (IsStoreDisabled)
@@ -505,7 +511,7 @@ public sealed class ActorIdentityResolver
         }
     }
 
-    private static ActorAliasRequest BuildSaveRequest(string raw, ActorNameHelper.Parts parts, ResolvedActor actor,
+    private static ActorAliasRequest BuildSaveRequest(string raw, ResolvedActor actor,
         ActorInfo detail, string sourceProvider, string translated, string targetLang)
     {
         var names = new List<ActorAliasNameInfo>();
@@ -521,9 +527,8 @@ public sealed class ActorIdentityResolver
         }
 
         Add(raw, ActorNameHelper.RoleAlias);
-        Add(actor.SourceDisplayName, ActorNameHelper.RoleStage);
-        if (!string.Equals(parts.SearchName, actor.SourceDisplayName, StringComparison.Ordinal))
-            Add(parts.SearchName, ActorNameHelper.Classify(parts.SearchName));
+        // B 是搜索用的艺名：按字符组成落到 stage / kana / romaji。
+        Add(actor.SourceDisplayName, ActorNameHelper.Classify(actor.SourceDisplayName));
 
         if (detail != null)
         {
@@ -542,6 +547,20 @@ public sealed class ActorIdentityResolver
             Translation = string.IsNullOrWhiteSpace(translated)
                 ? null
                 : new ActorAliasTranslationInfo { Lang = targetLang, Text = translated }
+        };
+    }
+
+    private static ActorAliasRequest BuildTranslationRequest(ResolvedActor actor, string translated,
+        string targetLang)
+    {
+        return new ActorAliasRequest
+        {
+            DisplayName = actor.SourceDisplayName,
+            Provider = actor.Provider,
+            ActorId = actor.ActorId,
+            Source = "lookup",
+            Names = Array.Empty<ActorAliasNameInfo>(),
+            Translation = new ActorAliasTranslationInfo { Lang = targetLang, Text = translated }
         };
     }
 
