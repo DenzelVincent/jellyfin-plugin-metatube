@@ -335,6 +335,25 @@ public class SyncActorCollectionsTask : IScheduledTask
         if (string.IsNullOrWhiteSpace(translated))
             translated = newName;
 
+        // 旧名字可能是纯译名（没有括号），优先用演员表里已有的艺名，
+        // 避免把旧误译当成艺名写回去。
+        try
+        {
+            var existing = await ApiClient.LookupActorAliasAsync(oldName, cancellationToken)
+                .ConfigureAwait(false);
+            if (existing?.Found == true && !existing.Ambiguous &&
+                !string.IsNullOrWhiteSpace(existing.Person?.StageName))
+                stage = existing.Person.StageName;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            _logger.Debug("Resolve actor stage before write back failed: {0} ({1})", oldName, e.Message);
+        }
+
         try
         {
             await ApiClient.SaveActorAliasAsync(new ActorAliasRequest
