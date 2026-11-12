@@ -37,7 +37,8 @@ public class SyncActorCollectionsTask : IScheduledTask
 
     public string Name => "同步演员合集";
 
-    public string Description => $"按 {Plugin.ProviderName} 元数据中的演员自动创建并维护演员合集。";
+    public string Description =>
+        $"按 {Plugin.ProviderName} 元数据中的演员全量重建演员合集：先删除插件维护的旧合集，再按当前数据显示名重新创建。";
 
     public string Category => Plugin.ProviderName;
 
@@ -147,8 +148,15 @@ public class SyncActorCollectionsTask : IScheduledTask
             noActorRemoveScope.UnionWith(allMetaTubeIds.Where(id => !inScopeIds.Contains(id)));
 
         var groups = ActorCollectionSync.Build(refs);
-        // ReadCollections 的入参是 ProviderIds 的字典键（即 Plugin.ProviderId，值 "MetaTube"），不是 pid 里的来源段（javbus 等）：传错会静默建出没 pid 的合集。
-        var collections = _libraryManager.ReadCollections(Plugin.ProviderId);
+
+        // 全量重建：先删除插件维护的旧合集（带 MetaTube pid 的演员合集、多人共演、无演员影片），
+        // 再以空的现有合集列表创建新合集。合集 ID、手工改名与手工成员都会重置（用户口径）。
+        var existingCollections = _libraryManager.ReadCollections(Plugin.ProviderId);
+        var removedCollections = RemoveCollectionsForRebuild(existingCollections, cancellationToken);
+        if (removedCollections > 0)
+            _logger.Info("Full actor collection rebuild: removed {0} collection(s)", removedCollections);
+
+        var collections = new List<ActorCollectionSync.ExistingCollection>();
         var index = new ActorCollectionSync.Index(collections);
         var updater = new ActorCollectionUpdater(_libraryManager, _collectionManager, _providerManager, _logger);
 
@@ -250,5 +258,48 @@ public class SyncActorCollectionsTask : IScheduledTask
         progress?.Report(100);
     }
 
+    /// <summary>
+    /// 删除插件维护的旧合集：带 MetaTube pid 的演员合集，以及固定名字的
+    /// 「多人共演」「无演员影片」。用户自定义名、无 pid 的普通合集不动。
+    /// 单个删除失败只记 Warn，继续重建其余合集。
+    /// </summary>
+    private int RemoveCollectionsForRebuild(
+        IReadOnlyCollection<ActorCollectionSync.ExistingCollection> collections,
+        CancellationToken cancellationToken)
+    {
+        var removed = 0;
+        foreach (var collection in collections)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var isPluginActor = !string.IsNullOrEmpty(collection.ActorId);
+            var isSpecial = IsRebuildSpecialName(collection.Name);
+            if (!isPluginActor && !isSpecial)
+                continue;
+
+            if (_libraryManager.GetItemById(collection.Id) is not BoxSet box)
+                continue;
+
+            try
+            {
+                // 与 Jellyfin 自己删除合集一致：条目与合集目录一起删。
+                _libraryManager.DeleteItem(box, new DeleteOptions { DeleteFileLocation = true });
+                removed++;
+            }
+            catch (Exception e)
+            {
+                _logger.Warn("Remove collection for full rebuild failed: {0} ({1})", collection.Name, e.Message);
+            }
+        }
+
+        return removed;
+    }
+
+    private static bool IsRebuildSpecialName(string name)
+    {
+        var value = (name ?? string.Empty).Trim();
+        return string.Equals(value, MultiActorCollectionSync.CollectionName, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, NoActorCollectionSync.CollectionName, StringComparison.OrdinalIgnoreCase);
+    }
 }
 #endif
