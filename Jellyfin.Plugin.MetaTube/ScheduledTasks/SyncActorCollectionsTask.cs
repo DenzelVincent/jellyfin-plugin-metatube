@@ -2,6 +2,7 @@
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.MetaTube.Extensions;
 using Jellyfin.Plugin.MetaTube.Helpers;
+using Jellyfin.Plugin.MetaTube.Metadata;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -109,6 +110,16 @@ public class SyncActorCollectionsTask : IScheduledTask
             _logger.Info("Actor collection library scope: {0} library(ies), {1} movie(s) in scope, {2} out of scope",
                 libraryScope.Length, inScopeIds.Count, allMetaTubeIds.Count - inScopeIds.Count);
 
+        // 与单片增量互斥：从演职表同步到重建结束都持有同一把锁。
+        using var collectionLock = await ActorCollectionLock.AcquireAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // 先把演员条目的当前名字同步回影片演职表：在演员页手动修正译名后，
+        // 跑一次本任务即可让影片页与合集名跟上。
+        var syncedMovies = await SyncPeopleNamesAsync(movies, cancellationToken).ConfigureAwait(false);
+        if (syncedMovies > 0)
+            _logger.Info("Actor people names synced from person items: {0} movie(s)", syncedMovies);
+
         var refs = new List<ActorCollectionSync.ActorRef>();
         var noActorIds = new List<Guid>();
         var withActorIds = new List<Guid>();
@@ -148,10 +159,6 @@ public class SyncActorCollectionsTask : IScheduledTask
             noActorRemoveScope.UnionWith(allMetaTubeIds.Where(id => !inScopeIds.Contains(id)));
 
         var groups = ActorCollectionSync.Build(refs);
-
-        // 与单片增量互斥：整个删除+重建期间持有同一把锁，增量请求排队等待。
-        using var collectionLock = await ActorCollectionLock.AcquireAsync(cancellationToken)
-            .ConfigureAwait(false);
 
         // 全量重建：先删除插件维护的旧合集（带 MetaTube pid 的演员合集、多人共演、无演员影片），
         // 再以空的现有合集列表创建新合集。合集 ID、手工改名与手工成员都会重置（用户口径）。
@@ -260,6 +267,94 @@ public class SyncActorCollectionsTask : IScheduledTask
             created, updated, skipped);
 
         progress?.Report(100);
+    }
+
+    /// <summary>
+    /// 把影片演职表里的演员名同步成 Person 条目当前名字（演员页手动修正译名后生效），
+    /// 并把新名字作为译名写回服务端演员表，避免下次重刮又被旧译名覆盖。
+    /// 只处理本次扫描到的 MetaTube 影片。
+    /// </summary>
+    private async Task<int> SyncPeopleNamesAsync(IReadOnlyCollection<BaseItem> movies,
+        CancellationToken cancellationToken)
+    {
+        var updatedMovies = 0;
+        var writtenActors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var movie in movies)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var people = _libraryManager.GetPeople(movie).ToList();
+            if (people.Count == 0)
+                continue;
+
+            var changed = false;
+            foreach (var personInfo in people)
+            {
+                if (personInfo.Id == Guid.Empty)
+                    continue;
+                if (_libraryManager.GetItemById(personInfo.Id) is not Person person)
+                    continue;
+
+                var newName = person.Name?.Trim();
+                if (string.IsNullOrEmpty(newName) ||
+                    string.Equals(personInfo.Name, newName, StringComparison.Ordinal))
+                    continue;
+
+                var oldName = personInfo.Name;
+                personInfo.Name = newName;
+                changed = true;
+                await WriteBackActorTranslationAsync(oldName, newName, person, writtenActors, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (!changed)
+                continue;
+
+            await _libraryManager.UpdatePeopleAsync(movie, people, cancellationToken).ConfigureAwait(false);
+            updatedMovies++;
+        }
+
+        return updatedMovies;
+    }
+
+    private async Task WriteBackActorTranslationAsync(string oldName, string newName, Person person,
+        ISet<string> writtenActors, CancellationToken cancellationToken)
+    {
+        var pid = person.GetPid(Plugin.ProviderId);
+        if (string.IsNullOrEmpty(pid.Provider) || string.IsNullOrEmpty(pid.Id))
+            return;
+
+        var key = pid.Provider + ":" + pid.Id;
+        if (!writtenActors.Add(key))
+            return;
+
+        // 旧演职名里的括号内是艺名；新名字若也被改成「译名（艺名）」，只取括号前的译名。
+        var stage = ActorNameHelper.Parse(oldName).SearchName;
+        if (string.IsNullOrWhiteSpace(stage))
+            stage = oldName;
+        var translated = ActorNameHelper.Parse(newName).DisplayName;
+        if (string.IsNullOrWhiteSpace(translated))
+            translated = newName;
+
+        try
+        {
+            await ApiClient.SaveActorAliasAsync(new ActorAliasRequest
+            {
+                StageName = stage.Trim(),
+                TranslatedName = translated.Trim(),
+                TranslationSource = "source",
+                Provider = pid.Provider,
+                ActorId = pid.Id,
+                Source = "person-edit"
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            _logger.Debug("Write back actor translation failed: {0} ({1})", newName, e.Message);
+        }
     }
 
     /// <summary>

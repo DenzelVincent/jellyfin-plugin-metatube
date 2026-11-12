@@ -1,7 +1,5 @@
 #if !__EMBY__
 using Jellyfin.Plugin.MetaTube.Extensions;
-using Jellyfin.Plugin.MetaTube.Metadata;
-using Jellyfin.Plugin.MetaTube.Translation;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -22,10 +20,6 @@ public sealed class ActorCollectionUpdater
     private readonly ICollectionManager _collectionManager;
     private readonly IProviderManager _providerManager;
     private readonly ILogger _logger;
-
-    // 合集名以演员表为准：同一轮里同一位演员只查一次；旧服务端不支持时只试一次。
-    private readonly Dictionary<string, string> _collectionNames = new(StringComparer.OrdinalIgnoreCase);
-    private bool _aliasNameLookupDisabled;
 
     public ActorCollectionUpdater(ILibraryManager libraryManager, ICollectionManager collectionManager,
         IProviderManager providerManager, ILogger logger)
@@ -123,51 +117,6 @@ public sealed class ActorCollectionUpdater
         }
     }
 
-    /// <summary>
-    /// 合集名以演员表为准：按影片里的显示名查别名表，开启演员翻译时取译名，
-    /// 否则取表里的规范显示名；旧服务端或查询失败时退回影片里的显示名。
-    /// 只在新建合集时调用，同一轮同一位演员只查一次。
-    /// </summary>
-    private async Task<string> ResolveCollectionNameAsync(string peopleName, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(peopleName) || _aliasNameLookupDisabled)
-            return peopleName;
-
-        if (_collectionNames.TryGetValue(peopleName, out var cached))
-            return cached;
-
-        var name = peopleName;
-        try
-        {
-            var alias = await ApiClient
-                .LookupActorAliasAsync(peopleName, cancellationToken)
-                .ConfigureAwait(false);
-            if (alias?.Found == true && !alias.Ambiguous && alias.Person != null)
-            {
-                var translated = Plugin.Instance.Configuration.TranslateActor ? alias.Person.TranslatedName : null;
-                name = ActorNameHelper.FormatDisplay(alias.Person.StageName, translated);
-                if (string.IsNullOrWhiteSpace(name))
-                    name = peopleName;
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (ActorAliasApiUnavailableException e)
-        {
-            _aliasNameLookupDisabled = true;
-            _logger.Debug("Actor alias API unavailable, use people names for collections: {0}", e.Message);
-        }
-        catch (Exception e)
-        {
-            _logger.Debug("Resolve actor collection name failed: {0} ({1})", peopleName, e.Message);
-        }
-
-        _collectionNames[peopleName] = name;
-        return name;
-    }
-
     private async Task<ActorCollectionSync.SyncAction> ApplyAsync(ActorCollectionSync.SyncPlan plan,
         CancellationToken cancellationToken)
     {
@@ -196,9 +145,8 @@ public sealed class ActorCollectionUpdater
 
         if (plan.Action == ActorCollectionSync.SyncAction.Create)
         {
-            // 合集名以演员表为准：优先用表里的译名（开启演员翻译时），否则用规范显示名。
-            var collectionName = await ResolveCollectionNameAsync(plan.Name, cancellationToken)
-                .ConfigureAwait(false);
+            // 合集名与影片页一致：任务开始前演职表已同步成 Person 当前名字，直接用它。
+            var collectionName = plan.Name;
 
             var box = await _collectionManager.CreateCollectionAsync(new CollectionCreationOptions
             {
