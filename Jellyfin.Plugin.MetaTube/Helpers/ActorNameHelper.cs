@@ -64,6 +64,23 @@ public static class ActorNameHelper
     }
 
     /// <summary>
+    /// 演员条目刷新元数据时的名字选择：已有名字（手动修改或刮削写入）优先保留，
+    /// 只有名字为空时才用字典里的艺名/译名，最后退回演员接口名。
+    /// </summary>
+    public static string ResolvePersonDisplay(string existingName, string fallbackName,
+        string stageName, string translatedName, bool translate)
+    {
+        var existing = existingName?.Trim();
+        if (!string.IsNullOrWhiteSpace(existing))
+            return existing;
+
+        var stage = string.IsNullOrWhiteSpace(stageName) ? fallbackName : stageName.Trim();
+        var translated = translate ? translatedName : null;
+        var composed = FormatDisplay(stage, translated);
+        return string.IsNullOrWhiteSpace(composed) ? fallbackName : composed;
+    }
+
+    /// <summary>
     /// 不同演员译成同一个名字时，后出现的那位回退为原名，避免 Jellyfin 按名字合并。
     /// 原名也已被占用时只能保留译文（此时合并无法避免）。
     /// </summary>

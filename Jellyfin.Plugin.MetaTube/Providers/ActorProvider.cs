@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.MetaTube.Extensions;
+using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Metadata;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
@@ -40,7 +41,7 @@ public class ActorProvider : BaseProvider, IRemoteMetadataProvider<Person, Perso
         {
             Item = new Person
             {
-                Name = m.Name,
+                Name = await ResolveDisplayNameAsync(info, m, cancellationToken),
                 PremiereDate = m.Birthday.GetValidDateTime(),
                 ProductionYear = m.Birthday.GetValidYear(),
                 Overview = FormatOverview(m)
@@ -100,6 +101,35 @@ public class ActorProvider : BaseProvider, IRemoteMetadataProvider<Person, Perso
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// 刷新演员元数据时不覆盖已有名字（手动修正优先）；空名字才用服务端字典的
+    /// 艺名/译名，查不到再退回演员接口名。
+    /// </summary>
+    private async Task<string> ResolveDisplayNameAsync(PersonLookupInfo info, ActorInfo m,
+        CancellationToken cancellationToken)
+    {
+        ActorAliasPersonInfo person = null;
+        try
+        {
+            var alias = await ApiClient.LookupActorAliasAsync(m.Name, cancellationToken)
+                .ConfigureAwait(false);
+            if (alias?.Found == true && !alias.Ambiguous)
+                person = alias.Person;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            Logger.Debug("Resolve actor display name failed: {0} ({1})", m.Name, e.Message);
+        }
+
+        return ActorNameHelper.ResolvePersonDisplay(info.Name, m.Name,
+            person?.StageName, person?.TranslatedName,
+            Plugin.Instance.Configuration.TranslateActor);
     }
 
     private static string FormatOverview(ActorInfo a)

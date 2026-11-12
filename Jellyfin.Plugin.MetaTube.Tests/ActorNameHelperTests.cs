@@ -45,6 +45,34 @@ public class ActorNameHelperTests
     }
 
     [Fact]
+    public void ResolvePersonDisplay_KeepsExistingName()
+    {
+        Assert.Equal("下川紬", ActorNameHelper.ResolvePersonDisplay(
+            "下川紬", "ゆい はつみ", "ゆい はつみ", "下川綢", true));
+    }
+
+    [Fact]
+    public void ResolvePersonDisplay_UsesComposedDictionaryNameWhenExistingEmpty()
+    {
+        Assert.Equal("下川紬（ゆい はつみ）", ActorNameHelper.ResolvePersonDisplay(
+            "  ", "ゆい はつみ", "ゆい はつみ", "下川紬", true));
+    }
+
+    [Fact]
+    public void ResolvePersonDisplay_UsesStageWhenTranslationOff()
+    {
+        Assert.Equal("ゆい はつみ", ActorNameHelper.ResolvePersonDisplay(
+            null, "interface-name", "ゆい はつみ", "下川紬", false));
+    }
+
+    [Fact]
+    public void ResolvePersonDisplay_FallsBackToInterfaceName()
+    {
+        Assert.Equal("interface-name", ActorNameHelper.ResolvePersonDisplay(
+            null, "interface-name", null, null, true));
+    }
+
+    [Fact]
     public void ResolveTranslatedCollisions_KeepsOriginalForLaterDuplicate()
     {
         var result = ActorNameHelper.ResolveTranslatedCollisions(
