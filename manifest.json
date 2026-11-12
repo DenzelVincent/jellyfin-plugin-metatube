@@ -1,0 +1,125 @@
+[
+  {
+    "guid": "01cc53ec-c415-4108-bbd4-a684a9801a32",
+    "name": "MetaTube",
+    "description": "MetaTube \u5143\u6570\u636e\u63d2\u4ef6\uff08\u4e2a\u4eba\u5206\u652f\uff09\uff1a\u6309\u7cfb\u5217\u4e0e\u6f14\u5458\u81ea\u52a8\u521b\u5efa\u5408\u96c6\u3001\u4e2d\u6587\u5b57\u5e55\u4e0e\u65e0\u7801\u7834\u89e3\u89d2\u6807\u3001\u5b57\u6bb5\u7ea7\u805a\u5408\u4e0e\u7ffb\u8bd1\u3002",
+    "overview": "Jellyfin/Emby \u5143\u6570\u636e\u63d2\u4ef6\uff0c\u4f9d\u8d56 MetaTube Server \u63d0\u4f9b\u6570\u636e\u3002",
+    "owner": "DenzelVincent",
+    "category": "Metadata",
+    "imageUrl": "https://raw.githubusercontent.com/DenzelVincent/jellyfin-plugin-metatube/main/Jellyfin.Plugin.MetaTube/thumb.png",
+    "versions": [
+      {
+        "checksum": "262b79461973cab5b5aa1dd097a4d536",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1112.612.0/Jellyfin.MetaTube@v2026.1112.612.0.zip",
+        "timestamp": "2026-11-12T06:13:13Z",
+        "version": "2026.1112.612.0"
+      },
+      {
+        "checksum": "dbd4e761541f4555daf741ca6918343f",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.945.0/Jellyfin.MetaTube@v2026.1111.945.0.zip",
+        "timestamp": "2026-11-11T09:46:27Z",
+        "version": "2026.1111.945.0"
+      },
+      {
+        "checksum": "10d98965dbb3626cb02eb9f4bb219a81",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.823.0/Jellyfin.MetaTube@v2026.1111.823.0.zip",
+        "timestamp": "2026-11-11T08:24:41Z",
+        "version": "2026.1111.823.0"
+      },
+      {
+        "checksum": "0fb5c6315d4487b1b377574242731ac5",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.751.0/Jellyfin.MetaTube@v2026.1111.751.0.zip",
+        "timestamp": "2026-11-11T07:52:32Z",
+        "version": "2026.1111.751.0"
+      },
+      {
+        "checksum": "1b007bb1722468a83f2d60b1f983b4e7",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.717.0/Jellyfin.MetaTube@v2026.1111.717.0.zip",
+        "timestamp": "2026-11-11T07:18:55Z",
+        "version": "2026.1111.717.0"
+      },
+      {
+        "checksum": "2275c1b14c423eb07a434ad1a3d4da62",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.615.0/Jellyfin.MetaTube@v2026.1111.615.0.zip",
+        "timestamp": "2026-11-11T06:16:08Z",
+        "version": "2026.1111.615.0"
+      },
+      {
+        "checksum": "86f247f1da18be55a7db39ff4cdb7a18",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.441.0/Jellyfin.MetaTube@v2026.1111.441.0.zip",
+        "timestamp": "2026-11-11T04:42:25Z",
+        "version": "2026.1111.441.0"
+      },
+      {
+        "checksum": "2cfc7a0ecd95fa63db81af8f855d0843",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.351.0/Jellyfin.MetaTube@v2026.1111.351.0.zip",
+        "timestamp": "2026-11-11T03:52:45Z",
+        "version": "2026.1111.351.0"
+      },
+      {
+        "checksum": "eac22f54f30feed8de9accef1bc23044",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1111.236.0/Jellyfin.MetaTube@v2026.1111.236.0.zip",
+        "timestamp": "2026-11-11T02:36:55Z",
+        "version": "2026.1111.236.0"
+      },
+      {
+        "checksum": "360c9dc47162dca36b980c49381144bb",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1110.647.0/Jellyfin.MetaTube@v2026.1110.647.0.zip",
+        "timestamp": "2026-11-10T06:47:54Z",
+        "version": "2026.1110.647.0"
+      },
+      {
+        "checksum": "144a979c3cc4e42b84eeb7eda95945ea",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1108.1231.0/Jellyfin.MetaTube@v2026.1108.1231.0.zip",
+        "timestamp": "2026-11-08T12:31:19Z",
+        "version": "2026.1108.1231.0"
+      },
+      {
+        "checksum": "32495b8352d5f94bb7490900e6d740cc",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1106.412.0/Jellyfin.MetaTube@v2026.1106.412.0.zip",
+        "timestamp": "2026-11-06T04:12:59Z",
+        "version": "2026.1106.412.0"
+      },
+      {
+        "checksum": "3ea8e6a8044659aeba92f15bfa06ed7b",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1106.323.0/Jellyfin.MetaTube@v2026.1106.323.0.zip",
+        "timestamp": "2026-11-06T03:24:17Z",
+        "version": "2026.1106.323.0"
+      },
+      {
+        "checksum": "3ea3a7e8834af3175bb0642bacec03e1",
+        "changelog": "Auto Released by Actions",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/DenzelVincent/jellyfin-plugin-metatube/releases/download/v2026.1104.1051.0/Jellyfin.MetaTube@v2026.1104.1051.0.zip",
+        "timestamp": "2026-11-04T10:52:09Z",
+        "version": "2026.1104.1051.0"
+      }
+    ]
+  }
+]
