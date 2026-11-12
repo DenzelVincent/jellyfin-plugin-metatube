@@ -319,14 +319,6 @@ public class SyncActorCollectionsTask : IScheduledTask
     private async Task WriteBackActorTranslationAsync(string oldName, string newName, Person person,
         ISet<string> writtenActors, CancellationToken cancellationToken)
     {
-        var pid = person.GetPid(Plugin.ProviderId);
-        if (string.IsNullOrEmpty(pid.Provider) || string.IsNullOrEmpty(pid.Id))
-            return;
-
-        var key = pid.Provider + ":" + pid.Id;
-        if (!writtenActors.Add(key))
-            return;
-
         // 旧演职名里的括号内是艺名；新名字若也被改成「译名（艺名）」，只取括号前的译名。
         var stage = ActorNameHelper.Parse(oldName).SearchName;
         if (string.IsNullOrWhiteSpace(stage))
@@ -335,24 +327,31 @@ public class SyncActorCollectionsTask : IScheduledTask
         if (string.IsNullOrWhiteSpace(translated))
             translated = newName;
 
-        // 旧名字可能是纯译名（没有括号），优先用演员表里已有的艺名，
-        // 避免把旧误译当成艺名写回去。
-        try
+        var pid = person.GetPid(Plugin.ProviderId);
+        var provider = pid.Provider;
+        var actorId = pid.Id;
+
+        // Person 上没有 pid 时，用旧名字/新名字去服务端字典反查身份；
+        // 手动改的演员大多是老条目，不能因为缺 pid 就跳过写回。
+        if (string.IsNullOrEmpty(provider) || string.IsNullOrEmpty(actorId))
         {
-            var existing = await ApiClient.LookupActorAliasAsync(oldName, cancellationToken)
-                .ConfigureAwait(false);
-            if (existing?.Found == true && !existing.Ambiguous &&
-                !string.IsNullOrWhiteSpace(existing.Person?.StageName))
-                stage = existing.Person.StageName;
+            var resolved = await LookupActorPersonAsync(oldName, cancellationToken).ConfigureAwait(false)
+                           ?? await LookupActorPersonAsync(newName, cancellationToken).ConfigureAwait(false);
+            if (resolved == null)
+            {
+                _logger.Warn("Actor dictionary not updated for {0}: no MetaTube identity found", newName);
+                return;
+            }
+
+            provider = resolved.Provider;
+            actorId = resolved.ActorId;
+            if (!string.IsNullOrWhiteSpace(resolved.StageName))
+                stage = resolved.StageName;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception e)
-        {
-            _logger.Debug("Resolve actor stage before write back failed: {0} ({1})", oldName, e.Message);
-        }
+
+        var key = provider + ":" + actorId;
+        if (!string.IsNullOrEmpty(provider) && !string.IsNullOrEmpty(actorId) && !writtenActors.Add(key))
+            return;
 
         try
         {
@@ -361,8 +360,8 @@ public class SyncActorCollectionsTask : IScheduledTask
                 StageName = stage.Trim(),
                 TranslatedName = translated.Trim(),
                 TranslationSource = "source",
-                Provider = pid.Provider,
-                ActorId = pid.Id,
+                Provider = provider,
+                ActorId = actorId,
                 Source = "person-edit"
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -372,7 +371,28 @@ public class SyncActorCollectionsTask : IScheduledTask
         }
         catch (Exception e)
         {
-            _logger.Debug("Write back actor translation failed: {0} ({1})", newName, e.Message);
+            _logger.Warn("Write back actor translation failed: {0} ({1})", newName, e.Message);
+        }
+    }
+
+    private async Task<ActorAliasPersonInfo> LookupActorPersonAsync(string name, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        try
+        {
+            var result = await ApiClient.LookupActorAliasAsync(name, cancellationToken).ConfigureAwait(false);
+            return result?.Found == true && !result.Ambiguous ? result.Person : null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            _logger.Debug("Lookup actor identity before write back failed: {0} ({1})", name, e.Message);
+            return null;
         }
     }
 
