@@ -149,6 +149,10 @@ public class SyncActorCollectionsTask : IScheduledTask
 
         var groups = ActorCollectionSync.Build(refs);
 
+        // 与单片增量互斥：整个删除+重建期间持有同一把锁，增量请求排队等待。
+        using var collectionLock = await ActorCollectionLock.AcquireAsync(cancellationToken)
+            .ConfigureAwait(false);
+
         // 全量重建：先删除插件维护的旧合集（带 MetaTube pid 的演员合集、多人共演、无演员影片），
         // 再以空的现有合集列表创建新合集。合集 ID、手工改名与手工成员都会重置（用户口径）。
         var existingCollections = _libraryManager.ReadCollections(Plugin.ProviderId);

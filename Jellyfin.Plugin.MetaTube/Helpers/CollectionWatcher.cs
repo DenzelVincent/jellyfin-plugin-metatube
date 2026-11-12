@@ -291,6 +291,10 @@ public sealed class CollectionWatcher : IHostedService
         if (config is null || !config.EnableActorCollections)
             return;
 
+        // 与每日全量重建互斥：重建期间排队，拿到锁后再读合集与写成员，避免重复合集。
+        using var collectionLock = await ActorCollectionLock.AcquireAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+
         var minMovieCount = config.ActorCollectionMinMovieCount;
         if (minMovieCount < 1)
             minMovieCount = 1;
