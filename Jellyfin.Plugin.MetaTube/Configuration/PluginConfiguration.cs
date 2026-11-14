@@ -186,7 +186,7 @@ public class PluginConfiguration : BasePluginConfiguration
         "AV-LEAGUE, AVSOX, C0930, Caribbeancom, CaribbeancomPR, DAHLIA, DUGA, FALENO, FC2, fc2hub, " +
         "FC2PPVDB, FREEJAVBT, Gcolle, Getchu, H0930, H4610, HEYZO, HeyDouga, IQQTV, JAVFREE, " +
         "KIN8, MadouQu, MINNANO, MURAMURA, MYWIFE, OFFICIAL, PACOPACOMAMA, Pcolle, SOD, ThePornDBMovie, " +
-        "ThePornDBScene, TOKYO-HOT, Wikipedia。\n默认：JavBus,FANZA,JAV321,AVE,MGS,AVBASE,GFriends")]
+        "ThePornDBScene, TOKYO-HOT, Wikipedia。\n默认：FANZA,JavBus,JAV321,OFFICIAL,AVE,MGS,AVBASE,MINNANO,GFriends")]
 #endif
     public string RawMovieProviderFilter
     {
@@ -250,10 +250,10 @@ public class PluginConfiguration : BasePluginConfiguration
         return result;
     }
 
-    // 越靠左优先级越高。FANZA 对新番收录最全，不能漏掉。
+    // 越靠左优先级越高。FANZA 对新番收录最全，排首位。
     private List<string> _movieProviderFilter = new()
     {
-        "JavBus", "FANZA", "JAV321", "AVE", "MGS", "AVBASE", "GFriends"
+        "FANZA", "JavBus", "JAV321", "OFFICIAL", "AVE", "MGS", "AVBASE", "MINNANO", "GFriends"
     };
 
 #if __EMBY__
