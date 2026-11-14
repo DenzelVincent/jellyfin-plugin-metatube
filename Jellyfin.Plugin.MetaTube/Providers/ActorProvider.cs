@@ -105,7 +105,7 @@ public class ActorProvider : BaseProvider, IRemoteMetadataProvider<Person, Perso
 
     /// <summary>
     /// 刷新演员元数据时不覆盖已有名字（手动修正优先）；空名字才用服务端字典的
-    /// 艺名/译名，查不到再退回演员接口名。
+    /// 艺名，查不到再退回演员接口名。
     /// </summary>
     private async Task<string> ResolveDisplayNameAsync(PersonLookupInfo info, ActorInfo m,
         CancellationToken cancellationToken)
@@ -127,9 +127,7 @@ public class ActorProvider : BaseProvider, IRemoteMetadataProvider<Person, Perso
             Logger.Debug("Resolve actor display name failed: {0} ({1})", m.Name, e.Message);
         }
 
-        return ActorNameHelper.ResolvePersonDisplay(info.Name, m.Name,
-            person?.StageName, person?.TranslatedName,
-            Plugin.Instance.Configuration.TranslateActor);
+        return ActorNameHelper.ResolvePersonDisplay(info.Name, m.Name, person?.StageName);
     }
 
     private static string FormatOverview(ActorInfo a)

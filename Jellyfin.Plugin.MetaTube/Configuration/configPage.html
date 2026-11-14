@@ -245,7 +245,7 @@
                 <div class="verticalSection">
                     <h2 class="sectionTitle">Translation</h2>
 
-                    <div class="fieldDescription">Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series and genres are cached in the server dictionary.</div>
+                    <div class="fieldDescription">Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while series and genres are cached in the server dictionary. Actor names are not translated: they use the stage name picked by the server.</div>
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
@@ -279,27 +279,36 @@
                         <div class="fieldDescription checkboxFieldDescription">Genres shown on the item page.</div>
                     </div>
 
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkTranslateActor" class="translationToggle" is="emby-checkbox" name="chkTranslateActor" type="checkbox"/>
-                            <span>Translate actor names</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">Actor entries are displayed with translated names; pids and photos are still searched by the original names.</div>
-                    </div>
-
                     <div class="translationSettings">
-                        <div class="selectContainer">
-                            <label class="selectLabel selectLabelText" for="selectTranslationEngine">Translation engine:</label>
-                            <select class="emby-select-withcolor emby-select selectTranslationEngine" id="selectTranslationEngine" is="emby-select" name="selectTranslationEngine">
-                                <option value="Baidu">Baidu</option>
-                                <option value="Google">Google</option>
-                                <option value="GoogleFree">Google (Free)</option>
-                                <option value="DeepL">DeepL</option>
-                                <option value="OpenAi">OpenAI</option>
-                            </select>
+                        <div class="fieldDescription">Primary engine: an OpenAI-compatible API. Fill the key to enable it; leave it blank to skip the primary engine and use the secondary one directly.</div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="txtOpenAiApiKey">OpenAI api key:</label>
+                            <input id="txtOpenAiApiKey" is="emby-input" name="txtOpenAiApiKey" type="text"/>
+                            <div class="fieldDescription"></div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="txtOpenAiApiUrl">OpenAI api url:</label>
+                            <input id="txtOpenAiApiUrl" is="emby-input" name="txtOpenAiApiUrl" type="text"/>
+                            <div class="fieldDescription">Custom OpenAI-compatible api url, must include the version path (e.g. https://api.openai.com/v1). (optional)</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="txtOpenAiModel">OpenAI model:</label>
+                            <input id="txtOpenAiModel" is="emby-input" name="txtOpenAiModel" type="text"/>
+                            <div class="fieldDescription">Leave blank to auto-pick the first available chat model from /v1/models; a filled value takes precedence. (optional)</div>
                         </div>
 
-                        <div class="selectTranslationEngineBaidu">
+                        <div class="selectContainer">
+                            <label class="selectLabel selectLabelText" for="selectSecondaryTranslationEngine">Secondary engine:</label>
+                            <select class="emby-select-withcolor emby-select selectSecondaryTranslationEngine" id="selectSecondaryTranslationEngine" is="emby-select" name="selectSecondaryTranslationEngine">
+                                <option value="None">None</option>
+                                <option value="Baidu">Baidu</option>
+                                <option value="GoogleFree">Google (Free)</option>
+                            </select>
+                            <div class="fieldDescription">Used when the primary engine fails or is not configured. Choose None to disable fallback.</div>
+                        </div>
+
+                        <div class="selectSecondaryTranslationEngineBaidu">
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="txtBaiduAppId">Baidu app id:</label>
                                 <input id="txtBaiduAppId" is="emby-input" name="txtBaiduAppId" type="text"/>
@@ -310,50 +319,6 @@
                                 <label class="inputLabel inputLabelUnfocused" for="txtBaiduAppKey">Baidu app key:</label>
                                 <input id="txtBaiduAppKey" is="emby-input" name="txtBaiduAppKey" type="text"/>
                                 <div class="fieldDescription"></div>
-                            </div>
-                        </div>
-
-                        <div class="selectTranslationEngineGoogle">
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtGoogleApiKey">Google api key:</label>
-                                <input id="txtGoogleApiKey" is="emby-input" name="txtGoogleApiKey" type="text"/>
-                                <div class="fieldDescription"></div>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtGoogleApiUrl">Google api url:</label>
-                                <input id="txtGoogleApiUrl" is="emby-input" name="txtGoogleApiUrl" type="text"/>
-                                <div class="fieldDescription">Custom Google translate api url. (optional)</div>
-                            </div>
-                        </div>
-
-                        <div class="selectTranslationEngineDeepL">
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtDeepLApiKey">DeepL api key:</label>
-                                <input id="txtDeepLApiKey" is="emby-input" name="txtDeepLApiKey" type="text"/>
-                                <div class="fieldDescription"></div>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtDeepLApiUrl">DeepL api url:</label>
-                                <input id="txtDeepLApiUrl" is="emby-input" name="txtDeepLApiUrl" type="text"/>
-                                <div class="fieldDescription">Custom DeepL-compatible api url. (optional)</div>
-                            </div>
-                        </div>
-
-                        <div class="selectTranslationEngineOpenAi">
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtOpenAiApiKey">OpenAI api key:</label>
-                                <input id="txtOpenAiApiKey" is="emby-input" name="txtOpenAiApiKey" type="text"/>
-                                <div class="fieldDescription"></div>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtOpenAiApiUrl">OpenAI api url:</label>
-                                <input id="txtOpenAiApiUrl" is="emby-input" name="txtOpenAiApiUrl" type="text"/>
-                                <div class="fieldDescription">Custom OpenAI-compatible api url. (optional)</div>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="txtOpenAiModel">OpenAI model:</label>
-                                <input id="txtOpenAiModel" is="emby-input" name="txtOpenAiModel" type="text"/>
-                                <div class="fieldDescription">Custom OpenAI-compatible api model. (optional)</div>
                             </div>
                         </div>
                     </div>
@@ -381,38 +346,8 @@
             updateTranslationSettingsVisibility($(this).closest('.MetaTubeConfigurationPage')[0]);
         });
 
-        $('.selectTranslationEngine').on('change', function (_) {
-            if (this.value === "Baidu") {
-                $('.selectTranslationEngineBaidu').css('display', 'inherit');
-                $('.selectTranslationEngineGoogle').css('display', 'none');
-                $('.selectTranslationEngineDeepL').css('display', 'none');
-                $('.selectTranslationEngineOpenAi').css('display', 'none');
-            } else if (this.value === "Google") {
-                $('.selectTranslationEngineBaidu').css('display', 'none');
-                $('.selectTranslationEngineGoogle').css('display', 'inherit');
-                $('.selectTranslationEngineDeepL').css('display', 'none');
-                $('.selectTranslationEngineOpenAi').css('display', 'none');
-            } else if (this.value === "GoogleFree") {
-                $('.selectTranslationEngineBaidu').css('display', 'none');
-                $('.selectTranslationEngineGoogle').css('display', 'none');
-                $('.selectTranslationEngineDeepL').css('display', 'none');
-                $('.selectTranslationEngineOpenAi').css('display', 'none');
-            } else if (this.value === "DeepL") {
-                $('.selectTranslationEngineBaidu').css('display', 'none');
-                $('.selectTranslationEngineGoogle').css('display', 'none');
-                $('.selectTranslationEngineDeepL').css('display', 'inherit');
-                $('.selectTranslationEngineOpenAi').css('display', 'none');
-            } else if (this.value === "OpenAi") {
-                $('.selectTranslationEngineBaidu').css('display', 'none');
-                $('.selectTranslationEngineGoogle').css('display', 'none');
-                $('.selectTranslationEngineDeepL').css('display', 'none');
-                $('.selectTranslationEngineOpenAi').css('display', 'inherit');
-            } else {
-                $('.selectTranslationEngineBaidu').css('display', 'none');
-                $('.selectTranslationEngineGoogle').css('display', 'none');
-                $('.selectTranslationEngineDeepL').css('display', 'none');
-                $('.selectTranslationEngineOpenAi').css('display', 'none');
-            }
+        $('.selectSecondaryTranslationEngine').on('change', function (_) {
+            $('.selectSecondaryTranslationEngineBaidu').css('display', this.value === "Baidu" ? 'inherit' : 'none');
         });
 
         var actorLibrariesLoaded = false;
@@ -511,15 +446,10 @@
                 page.querySelector('#chkTranslateSummary').checked = config.TranslateSummary;
                 page.querySelector('#chkTranslateSeries').checked = config.TranslateSeries;
                 page.querySelector('#chkTranslateGenre').checked = config.TranslateGenre;
-                page.querySelector('#chkTranslateActor').checked = config.TranslateActor;
                 updateTranslationSettingsVisibility(page);
-                $('#selectTranslationEngine', page).val(config.TranslationEngine).change();
+                $('#selectSecondaryTranslationEngine', page).val(config.SecondaryTranslationEngine).change();
                 $('#txtBaiduAppId', page).val(config.BaiduAppId).change();
                 $('#txtBaiduAppKey', page).val(config.BaiduAppKey).change();
-                $('#txtGoogleApiKey', page).val(config.GoogleApiKey).change();
-                $('#txtGoogleApiUrl', page).val(config.GoogleApiUrl).change();
-                $('#txtDeepLApiKey', page).val(config.DeepLApiKey).change();
-                $('#txtDeepLApiUrl', page).val(config.DeepLApiUrl).change();
                 $('#txtOpenAiApiKey', page).val(config.OpenAiApiKey).change();
                 $('#txtOpenAiApiUrl', page).val(config.OpenAiApiUrl).change();
                 $('#txtOpenAiModel', page).val(config.OpenAiModel).change();
@@ -571,14 +501,9 @@
                 config.TranslateSummary = $('#chkTranslateSummary', form).prop('checked');
                 config.TranslateSeries = $('#chkTranslateSeries', form).prop('checked');
                 config.TranslateGenre = $('#chkTranslateGenre', form).prop('checked');
-                config.TranslateActor = $('#chkTranslateActor', form).prop('checked');
-                config.TranslationEngine = $('#selectTranslationEngine', form).val();
+                config.SecondaryTranslationEngine = $('#selectSecondaryTranslationEngine', form).val();
                 config.BaiduAppId = $('#txtBaiduAppId', form).val();
                 config.BaiduAppKey = $('#txtBaiduAppKey', form).val();
-                config.GoogleApiKey = $('#txtGoogleApiKey', form).val();
-                config.GoogleApiUrl = $('#txtGoogleApiUrl', form).val();
-                config.DeepLApiKey = $('#txtDeepLApiKey', form).val();
-                config.DeepLApiUrl = $('#txtDeepLApiUrl', form).val();
                 config.OpenAiApiKey = $('#txtOpenAiApiKey', form).val();
                 config.OpenAiApiUrl = $('#txtOpenAiApiUrl', form).val();
                 config.OpenAiModel = $('#txtOpenAiModel', form).val();
@@ -666,7 +591,7 @@
                 "Name template:": "名称模板：",
                 "Tagline template:": "标语模板：",
                 "Translation": "翻译",
-                "Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while actors, series and genres are cached in the server dictionary.": "把勾选的字段翻译成简体中文。只处理勾选项；合集、标签、Studio 与模板变量都用译文生成。标题与简介每次刮削都重新翻译，演员、系列、类别译一次后存入服务端字典复用。",
+                "Translate the selected fields to Simplified Chinese. Only selected fields are touched; collections, tags, studios and template variables are built from the translated values. Title and plot are translated on every scrape, while series and genres are cached in the server dictionary. Actor names are not translated: they use the stage name picked by the server.": "把勾选的字段翻译成简体中文。只处理勾选项；合集、标签、Studio 与模板变量都用译文生成。标题与简介每次刮削都重新翻译，系列、类别译一次后存入服务端字典复用。演员名不翻译：使用服务端优选的艺名。",
                 "Translate title": "翻译标题",
                 "Movie title shown on the item page.": "影片条目页显示的标题。",
                 "Translate summary": "翻译简介",
@@ -675,27 +600,19 @@
                 "Collection names, series tags and the {series} template variable use the translated name.": "合集名、系列标签与 {series} 模板变量使用译文。",
                 "Translate genres": "翻译类别",
                 "Genres shown on the item page.": "影片条目页显示的类别。",
-                "Translate actor names": "翻译演员名",
-                "Actor entries are displayed with translated names; pids and photos are still searched by the original names.": "演员条目显示译名；pid 与头像仍按原名搜索。",
-                "Translation engine:": "翻译引擎：",
-                "Baidu": "百度",
-                "Google": "谷歌",
-                "Google (Free)": "谷歌（免费）",
-                "DeepL": "DeepL",
-                "OpenAI": "OpenAI",
-                "Baidu app id:": "百度 App ID：",
-                "Baidu app key:": "百度 App Key：",
-                "Google api key:": "谷歌 API Key：",
-                "Google api url:": "谷歌 API 地址：",
-                "Custom Google translate api url. (optional)": "自定义谷歌翻译 API 地址。（可选）",
-                "DeepL api key:": "DeepL API Key：",
-                "DeepL api url:": "DeepL API 地址：",
-                "Custom DeepL-compatible api url. (optional)": "兼容 DeepL 的自定义 API 地址。（可选）",
+                "Primary engine: an OpenAI-compatible API. Fill the key to enable it; leave it blank to skip the primary engine and use the secondary one directly.": "主引擎：兼容 OpenAI 的接口。填写密钥即启用；留空则跳过主引擎，直接用辅引擎。",
                 "OpenAI api key:": "OpenAI API Key：",
                 "OpenAI api url:": "OpenAI API 地址：",
-                "Custom OpenAI-compatible api url. (optional)": "兼容 OpenAI 的自定义 API 地址。（可选）",
+                "Custom OpenAI-compatible api url, must include the version path (e.g. https://api.openai.com/v1). (optional)": "兼容 OpenAI 的自定义 API 地址，需包含版本路径（例如 https://api.openai.com/v1）。（可选）",
                 "OpenAI model:": "OpenAI 模型：",
-                "Custom OpenAI-compatible api model. (optional)": "兼容 OpenAI 的自定义 API 模型。（可选）",
+                "Leave blank to auto-pick the first available chat model from /v1/models; a filled value takes precedence. (optional)": "留空时自动从 /v1/models 中选取首个可用对话模型；填写后优先使用填写的模型。（可选）",
+                "Secondary engine:": "辅翻译引擎：",
+                "Used when the primary engine fails or is not configured. Choose None to disable fallback.": "主引擎失败或未配置时回退到这里；选「无」则不回退。",
+                "None": "无",
+                "Baidu": "百度",
+                "Google (Free)": "谷歌（免费）",
+                "Baidu app id:": "百度 App ID：",
+                "Baidu app key:": "百度 App Key：",
                 "Save": "保存"
             };
 

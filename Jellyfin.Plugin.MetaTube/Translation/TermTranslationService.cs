@@ -6,7 +6,6 @@ namespace Jellyfin.Plugin.MetaTube.Translation;
 /// <summary>术语类别，与服务端 translation_metadata.kind 一一对应。</summary>
 public enum TermKind
 {
-    Actor,
     Series,
     Genre
 }
@@ -16,7 +15,8 @@ public interface ITermStore
 {
     Task<string> LookupAsync(TermKind kind, string source, CancellationToken cancellationToken);
 
-    Task<string> SaveAsync(TermKind kind, string source, string translatedText, CancellationToken cancellationToken);
+    Task<string> SaveAsync(TermKind kind, string source, string translatedText, string engine,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -25,7 +25,7 @@ public interface ITermStore
 /// </summary>
 public interface ITextTranslator
 {
-    Task<string> TranslateAsync(string text, CancellationToken cancellationToken);
+    Task<EngineTranslation> TranslateAsync(string text, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -81,10 +81,10 @@ public sealed class TermTranslationService
         if (!string.IsNullOrWhiteSpace(hit))
             return Remember(cacheKey, hit.Trim());
 
-        string translated;
+        EngineTranslation translation;
         try
         {
-            translated = (await _translator.TranslateAsync(trimmed, cancellationToken).ConfigureAwait(false))?.Trim();
+            translation = await _translator.TranslateAsync(trimmed, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -97,10 +97,11 @@ public sealed class TermTranslationService
             return trimmed;
         }
 
+        var translated = translation?.Text?.Trim();
         if (string.IsNullOrWhiteSpace(translated))
             return trimmed;
 
-        // 术语会直接当合集名、标签、演员名，带换行会把库里的名字弄坏。
+        // 术语会直接当合集名、标签，带换行会把库里的名字弄坏。
         if (translated.Contains('\n') || translated.Contains('\r'))
         {
             log($"Term translation contains line breaks, keep original: {kind} {trimmed}");
@@ -112,7 +113,8 @@ public sealed class TermTranslationService
         {
             try
             {
-                effective = await _store.SaveAsync(kind, trimmed, translated, cancellationToken).ConfigureAwait(false);
+                effective = await _store.SaveAsync(kind, trimmed, translated, translation.Engine, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

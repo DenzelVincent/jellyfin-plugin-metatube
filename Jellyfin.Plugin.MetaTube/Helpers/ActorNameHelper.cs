@@ -4,8 +4,8 @@ namespace Jellyfin.Plugin.MetaTube.Helpers;
 /// 演员名拆分。
 ///
 /// 影片来源常见写法是「A（B）」：B 是搜索更准确的艺名（含假名写法），A 是数据源
-/// 可能已转换好的汉字名（直接当译名）。没有括号时整串就是 B。原始字符串不删改，
-/// 拆分结果只用于搜索、显示与入库。
+/// 可能已转换好的汉字名（进候选池）。没有括号时整串就是 B。原始字符串不删改，
+/// 拆分结果只用于搜索与候选池；显示名由服务端艺名优选决定。
 /// </summary>
 public static class ActorNameHelper
 {
@@ -44,69 +44,16 @@ public static class ActorNameHelper
     }
 
     /// <summary>
-    /// 页面/合集显示名：有译名时显示「译名（艺名）」，便于发现误译；没有译名或两者相同
-    /// 时只显示艺名。艺名已包含在译名里（如 A（B）原样译回）时不再重复拼接。
-    /// </summary>
-    public static string FormatDisplay(string stageName, string translatedName)
-    {
-        var stage = (stageName ?? string.Empty).Trim();
-        var translated = (translatedName ?? string.Empty).Trim();
-
-        if (translated.Length == 0)
-            return stage;
-        if (stage.Length == 0)
-            return translated;
-        if (string.Equals(translated, stage, StringComparison.Ordinal) ||
-            translated.IndexOf(stage, StringComparison.Ordinal) >= 0)
-            return translated;
-
-        return $"{translated}（{stage}）";
-    }
-
-    /// <summary>
     /// 演员条目刷新元数据时的名字选择：已有名字（手动修改或刮削写入）优先保留，
-    /// 只有名字为空时才用字典里的艺名/译名，最后退回演员接口名。
+    /// 名字为空时用字典里的艺名，最后退回演员接口名。
     /// </summary>
-    public static string ResolvePersonDisplay(string existingName, string fallbackName,
-        string stageName, string translatedName, bool translate)
+    public static string ResolvePersonDisplay(string existingName, string fallbackName, string stageName)
     {
         var existing = existingName?.Trim();
         if (!string.IsNullOrWhiteSpace(existing))
             return existing;
 
-        var stage = string.IsNullOrWhiteSpace(stageName) ? fallbackName : stageName.Trim();
-        var translated = translate ? translatedName : null;
-        var composed = FormatDisplay(stage, translated);
-        return string.IsNullOrWhiteSpace(composed) ? fallbackName : composed;
-    }
-
-    /// <summary>
-    /// 不同演员译成同一个名字时，后出现的那位回退为原名，避免 Jellyfin 按名字合并。
-    /// 原名也已被占用时只能保留译文（此时合并无法避免）。
-    /// </summary>
-    public static string[] ResolveTranslatedCollisions(string[] sources, string[] translated)
-    {
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        var result = new string[translated.Length];
-        for (var i = 0; i < translated.Length; i++)
-        {
-            var candidate = translated[i];
-            if (!string.IsNullOrWhiteSpace(candidate) && used.Add(candidate))
-            {
-                result[i] = candidate;
-                continue;
-            }
-
-            var fallback = sources[i];
-            if (!string.IsNullOrWhiteSpace(fallback) && used.Add(fallback))
-            {
-                result[i] = fallback;
-                continue;
-            }
-
-            result[i] = candidate;
-        }
-
-        return result;
+        var stage = stageName?.Trim();
+        return string.IsNullOrWhiteSpace(stage) ? fallbackName : stage;
     }
 }

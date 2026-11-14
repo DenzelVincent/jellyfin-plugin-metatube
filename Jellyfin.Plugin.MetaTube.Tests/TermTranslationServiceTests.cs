@@ -13,13 +13,13 @@ public class TermTranslationServiceTests
     [Fact]
     public async Task ResolveAsync_UsesServerHitWithoutCallingEngine()
     {
-        var store = new FakeStore { LookupResult = "柚井初美" };
+        var store = new FakeStore { LookupResult = "第一风格" };
         var translator = new FakeTranslator();
         var service = new TermTranslationService(store, translator);
 
-        var result = await service.ResolveAsync(TermKind.Actor, "Yui Hatsumi", CancellationToken.None);
+        var result = await service.ResolveAsync(TermKind.Series, "S1 NO.1 STYLE", CancellationToken.None);
 
-        Assert.Equal("柚井初美", result);
+        Assert.Equal("第一风格", result);
         Assert.Equal(0, translator.Calls);
         Assert.Equal(0, store.SaveCalls);
     }
@@ -28,42 +28,43 @@ public class TermTranslationServiceTests
     public async Task ResolveAsync_OnMissTranslatesAndSaves()
     {
         var store = new FakeStore();
-        var translator = new FakeTranslator { Result = "柚井初美" };
+        var translator = new FakeTranslator { Result = "第一风格" };
         var service = new TermTranslationService(store, translator);
 
-        var result = await service.ResolveAsync(TermKind.Actor, "Yui Hatsumi", CancellationToken.None);
+        var result = await service.ResolveAsync(TermKind.Series, "S1 NO.1 STYLE", CancellationToken.None);
 
-        Assert.Equal("柚井初美", result);
+        Assert.Equal("第一风格", result);
         Assert.Equal(1, translator.Calls);
         Assert.Equal(1, store.SaveCalls);
-        Assert.Equal(("Yui Hatsumi", "柚井初美"), store.LastSaved);
+        // 回写带实际产出译文的引擎名，供服务端 translation_metadata.engine 记录。
+        Assert.Equal(("S1 NO.1 STYLE", "第一风格", "TestEngine"), store.LastSaved);
     }
 
     [Fact]
     public async Task ResolveAsync_PrefersEffectiveValueReturnedByServer()
     {
         // 并发下另一部影片先写了同一术语，服务端保留首写译文。
-        var store = new FakeStore { SaveResult = "柚井初美" };
-        var translator = new FakeTranslator { Result = "柚井初美（新）" };
+        var store = new FakeStore { SaveResult = "第一风格" };
+        var translator = new FakeTranslator { Result = "第一风格（新）" };
         var service = new TermTranslationService(store, translator);
 
-        var result = await service.ResolveAsync(TermKind.Actor, "Yui Hatsumi", CancellationToken.None);
+        var result = await service.ResolveAsync(TermKind.Series, "S1 NO.1 STYLE", CancellationToken.None);
 
-        Assert.Equal("柚井初美", result);
+        Assert.Equal("第一风格", result);
     }
 
     [Fact]
     public async Task ResolveAsync_CachesNormalizedTerm()
     {
         var store = new FakeStore();
-        var translator = new FakeTranslator { Result = "柚井初美" };
+        var translator = new FakeTranslator { Result = "第一风格" };
         var service = new TermTranslationService(store, translator);
 
-        var first = await service.ResolveAsync(TermKind.Actor, "  Yui Hatsumi  ", CancellationToken.None);
-        var second = await service.ResolveAsync(TermKind.Actor, "yui hatsumi", CancellationToken.None);
+        var first = await service.ResolveAsync(TermKind.Series, "  S1 NO.1 STYLE  ", CancellationToken.None);
+        var second = await service.ResolveAsync(TermKind.Series, "s1 no.1 style", CancellationToken.None);
 
-        Assert.Equal("柚井初美", first);
-        Assert.Equal("柚井初美", second);
+        Assert.Equal("第一风格", first);
+        Assert.Equal("第一风格", second);
         Assert.Equal(1, store.LookupCalls);
         Assert.Equal(1, translator.Calls);
     }
@@ -77,7 +78,7 @@ public class TermTranslationServiceTests
         var calls = 0;
         translator.Translate = _ => (++calls).ToString();
 
-        Assert.Equal("1", await service.ResolveAsync(TermKind.Actor, "Same", CancellationToken.None));
+        Assert.Equal("1", await service.ResolveAsync(TermKind.Series, "Same", CancellationToken.None));
         Assert.Equal("2", await service.ResolveAsync(TermKind.Genre, "Same", CancellationToken.None));
         Assert.Equal(2, translator.Calls);
     }
@@ -131,13 +132,13 @@ public class TermTranslationServiceTests
     [Fact]
     public async Task ResolveAsync_SameAsSourceIsCachedAsSuccess()
     {
-        // 引擎成功但译名与原文相同（例如纯英文演员名），仍应写库并缓存。
+        // 引擎成功但译名与原文相同（例如纯英文系列名），仍应写库并缓存。
         var store = new FakeStore();
         var translator = new FakeTranslator { Result = "Alice" };
         var service = new TermTranslationService(store, translator);
 
-        await service.ResolveAsync(TermKind.Actor, "Alice", CancellationToken.None);
-        await service.ResolveAsync(TermKind.Actor, "Alice", CancellationToken.None);
+        await service.ResolveAsync(TermKind.Series, "Alice", CancellationToken.None);
+        await service.ResolveAsync(TermKind.Series, "Alice", CancellationToken.None);
 
         Assert.Equal(1, translator.Calls);
         Assert.Equal(1, store.SaveCalls);
@@ -156,8 +157,8 @@ public class TermTranslationServiceTests
                 warnings.Add(message);
         };
 
-        await service.ResolveAsync(TermKind.Actor, "A", CancellationToken.None, log);
-        await service.ResolveAsync(TermKind.Actor, "B", CancellationToken.None, log);
+        await service.ResolveAsync(TermKind.Series, "A", CancellationToken.None, log);
+        await service.ResolveAsync(TermKind.Series, "B", CancellationToken.None, log);
 
         // 字典不可用后不再查库，也不再尝试写入。
         Assert.Equal(1, store.LookupCalls);
@@ -189,7 +190,7 @@ public class TermTranslationServiceTests
         var translator = new FakeTranslator();
         var service = new TermTranslationService(store, translator);
 
-        var result = await service.ResolveAsync(TermKind.Actor, "   ", CancellationToken.None);
+        var result = await service.ResolveAsync(TermKind.Series, "   ", CancellationToken.None);
 
         Assert.Equal("   ", result);
         Assert.Equal(0, store.LookupCalls);
@@ -204,7 +205,7 @@ public class TermTranslationServiceTests
         public Exception SaveError { get; set; }
         public int LookupCalls { get; private set; }
         public int SaveCalls { get; private set; }
-        public (string Source, string Translated) LastSaved { get; private set; }
+        public (string Source, string Translated, string Engine) LastSaved { get; private set; }
 
         public Task<string> LookupAsync(TermKind kind, string source, CancellationToken cancellationToken)
         {
@@ -212,11 +213,11 @@ public class TermTranslationServiceTests
             return LookupError != null ? Task.FromException<string>(LookupError) : Task.FromResult(LookupResult);
         }
 
-        public Task<string> SaveAsync(TermKind kind, string source, string translatedText,
+        public Task<string> SaveAsync(TermKind kind, string source, string translatedText, string engine,
             CancellationToken cancellationToken)
         {
             SaveCalls++;
-            LastSaved = (source, translatedText);
+            LastSaved = (source, translatedText, engine);
             return SaveError != null ? Task.FromException<string>(SaveError) : Task.FromResult(SaveResult);
         }
     }
@@ -228,13 +229,14 @@ public class TermTranslationServiceTests
         public int Calls { get; private set; }
         public Func<string, string> Translate { get; set; }
 
-        public Task<string> TranslateAsync(string text, CancellationToken cancellationToken)
+        public Task<EngineTranslation> TranslateAsync(string text, CancellationToken cancellationToken)
         {
             Calls++;
             if (Error != null)
-                return Task.FromException<string>(Error);
+                return Task.FromException<EngineTranslation>(Error);
 
-            return Task.FromResult(Translate != null ? Translate(text) : Result);
+            var translated = Translate != null ? Translate(text) : Result;
+            return Task.FromResult(new EngineTranslation(translated, "TestEngine"));
         }
     }
 }

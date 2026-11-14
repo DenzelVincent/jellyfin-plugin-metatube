@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.MetaTube.Metadata;
 
-/// <summary>演员身份：一个艺名（搜索名）+ 一个译名。</summary>
+/// <summary>演员身份：一个艺名 + 来源 pid。译名已废除，显示名即艺名。</summary>
 public class ActorAliasPersonInfo
 {
     [JsonPropertyName("id")]
@@ -10,9 +10,6 @@ public class ActorAliasPersonInfo
 
     [JsonPropertyName("stage_name")]
     public string StageName { get; set; }
-
-    [JsonPropertyName("translated_name")]
-    public string TranslatedName { get; set; }
 
     [JsonPropertyName("provider")]
     public string Provider { get; set; }
@@ -37,17 +34,14 @@ public class ActorAliasResult
     public ActorAliasPersonInfo[] Matches { get; set; }
 }
 
-/// <summary>PUT /v1/actor-aliases 的请求体。</summary>
+/// <summary>
+/// PUT /v1/actor-aliases 的请求体：候选名字池由服务端按汉字数优选艺名。
+/// source 取 auto（解析器）或 person-edit（手动改名写回）。
+/// </summary>
 public class ActorAliasRequest
 {
-    [JsonPropertyName("stage_name")]
-    public string StageName { get; set; }
-
-    [JsonPropertyName("translated_name")]
-    public string TranslatedName { get; set; }
-
-    [JsonPropertyName("translation_source")]
-    public string TranslationSource { get; set; }
+    [JsonPropertyName("names")]
+    public string[] Names { get; set; }
 
     [JsonPropertyName("provider")]
     public string Provider { get; set; }
@@ -89,16 +83,4 @@ public class ActorAliasLookupResult
 {
     [JsonPropertyName("items")]
     public ActorAliasLookupItem[] Items { get; set; }
-}
-
-/// <summary>
-/// 服务端没有演员身份接口（通常是旧版本）。上层收到它应降级为
-/// 「只按演员搜索解析」，不能当成普通 API 错误打断刮削。
-/// </summary>
-public sealed class ActorAliasApiUnavailableException : Exception
-{
-    public ActorAliasApiUnavailableException()
-        : base("Actor alias API is not available on the server")
-    {
-    }
 }

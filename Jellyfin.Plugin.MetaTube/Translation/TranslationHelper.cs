@@ -1,5 +1,3 @@
-using System.Collections.Specialized;
-using System.Text;
 using Jellyfin.Plugin.MetaTube.Configuration;
 using Jellyfin.Plugin.MetaTube.Helpers;
 using Jellyfin.Plugin.MetaTube.Metadata;
@@ -11,41 +9,29 @@ public static class TranslationHelper
     /// <summary>目标语言固定为简体中文，配置页不再提供语言选择。</summary>
     public const string TargetLanguage = "zh-CN";
 
-    private const string AutoLanguageCode = "auto";
+    // 主辅引擎编排：主引擎 OpenAI 优先，失败或未配置时回退辅引擎（百度/谷歌免费/无）。
+    private static readonly TranslationEngineChain Chain =
+        new(new ServerTranslationEngine(), () => Plugin.Instance.Configuration);
 
-    /// <summary>
-    /// Maximum characters sent to the free Google endpoint in a single request.
-    /// Japanese text is URL-encoded to roughly nine times its length, so keeping
-    /// this small avoids Google rejecting the request for being too long.
-    /// </summary>
-    private const int FreeChunkLength = 600;
-
-    /// <summary>
-    /// Hard timeout for a single free translation request (includes retries).
-    /// </summary>
-    private static readonly TimeSpan FreeTimeout = TimeSpan.FromSeconds(20);
-
-    private static readonly SemaphoreSlim Semaphore = new(1);
-
-    // 进程级术语服务：同一演员/系列/类别在一次进程生命周期内只查一次库、只翻一次。
+    // 进程级术语服务：同一系列/类别在一次进程生命周期内只查一次库、只翻一次。
     private static readonly TermTranslationService Terms = new(new ServerTermStore(), new EngineTextTranslator());
 
     private static PluginConfiguration Configuration => Plugin.Instance.Configuration;
 
-    /// <summary>7 个翻译项任一勾选即启用翻译；全不勾时完全不触碰元数据。</summary>
+    /// <summary>4 个翻译项任一勾选即启用翻译；全不勾时完全不触碰元数据。</summary>
     public static bool IsEnabled
     {
         get
         {
             var config = Configuration;
             return config.TranslateTitle || config.TranslateSummary || config.TranslateSeries ||
-                   config.TranslateGenre || config.TranslateActor;
+                   config.TranslateGenre;
         }
     }
 
     /// <summary>
     /// 按配置勾选项翻译影片元数据。标题/简介每次直译；系列、类别走术语字典。
-    /// 演员名由 <see cref="ActorIdentityResolver"/> 单独处理（身份解析 + 翻译）。
+    /// 演员名不翻译：由 <see cref="ActorIdentityResolver"/> 解析身份并取服务端优选艺名。
     /// </summary>
     public static async Task TranslateMovieAsync(Metadata.MovieInfo m,
         CancellationToken cancellationToken, Action<string> log = null)
@@ -73,26 +59,15 @@ public static class TranslationHelper
                     .ConfigureAwait(false);
             m.Genres = genres;
         }
-
     }
 
     /// <summary>
-    /// 演员名翻译入口：走与系列/类别相同的术语字典（同一身份的不同写法最终都以
-    /// 规范名作为键，所以译文稳定）。引擎失败时返回原文，不抛异常。
-    /// </summary>
-    internal static Task<string> TranslateActorNameAsync(string name, CancellationToken cancellationToken,
-        Action<string> log)
-    {
-        return Terms.ResolveAsync(TermKind.Actor, name, cancellationToken, log);
-    }
-
-    /// <summary>
-    /// 术语用的直译入口：与标题/简介共用限速、重试与免费端点降级，
+    /// 术语用的直译入口：与标题/简介共用主辅引擎链，
     /// 但失败必须抛出——TermTranslationService 靠异常区分「引擎失败」和「译名与原文相同」。
     /// </summary>
-    internal static Task<string> TranslateTermAsync(string text, CancellationToken cancellationToken)
+    internal static Task<EngineTranslation> TranslateTermAsync(string text, CancellationToken cancellationToken)
     {
-        return TranslateFieldAsync(text, cancellationToken, _ => { });
+        return Chain.TranslateAsync(text, cancellationToken);
     }
 
     /// <summary>
@@ -104,7 +79,7 @@ public static class TranslationHelper
     {
         try
         {
-            return await TranslateFieldAsync(text, cancellationToken, log).ConfigureAwait(false);
+            return (await Chain.TranslateAsync(text, cancellationToken, log).ConfigureAwait(false)).Text;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -124,12 +99,9 @@ public static class TranslationHelper
     private static async Task LogResolvedModelAsync(CancellationToken cancellationToken, Action<string> log)
     {
         var config = Configuration;
-        // 只有真的会用到 OpenAI（选它，或免费端点失败时回落到它）才值得探测：
+        // 主引擎没配密钥就不会调 OpenAI，不值得探测：
         // 探测是带 10 秒超时的真实请求，端点不可达时每张影片都可能白等一趟。
-        if (config.TranslationEngine != TranslationEngine.OpenAi && !CanFallbackToAi())
-            return;
-
-        if (string.IsNullOrWhiteSpace(config.OpenAiApiUrl) || !string.IsNullOrWhiteSpace(config.OpenAiModel))
+        if (string.IsNullOrWhiteSpace(config.OpenAiApiKey) || !string.IsNullOrWhiteSpace(config.OpenAiModel))
             return;
 
         try
@@ -147,215 +119,6 @@ public static class TranslationHelper
         catch (Exception e)
         {
             log($"OpenAI model auto detection error: {e.Message}");
-        }
-    }
-
-    private static async Task<string> TranslateFieldAsync(string text,
-        CancellationToken cancellationToken, Action<string> log)
-    {
-        var engine = Configuration.TranslationEngine;
-
-        if (engine != TranslationEngine.GoogleFree)
-            return await TranslateTextAsync(text, engine, cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            return await TranslateWithFreeAsync(text, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Caller cancelled (server shutting down / refresh aborted), do not fallback.
-            throw;
-        }
-        catch (Exception e)
-        {
-            if (!CanFallbackToAi())
-                throw;
-
-            log($"Free translate failed: {e.Message}, fallback to OpenAI");
-
-            return await TranslateTextAsync(text, TranslationEngine.OpenAi, cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>
-    /// Splits long text into chunks and translates them one by one, then merges the result.
-    /// </summary>
-    private static async Task<string> TranslateWithFreeAsync(string text, CancellationToken cancellationToken)
-    {
-        var chunks = SplitText(text, FreeChunkLength);
-        if (chunks.Count == 1)
-            return await TranslateChunkAsync(chunks[0], cancellationToken).ConfigureAwait(false);
-
-        var builder = new StringBuilder(text.Length + 16);
-        foreach (var chunk in chunks)
-            builder.Append(await TranslateChunkAsync(chunk, cancellationToken).ConfigureAwait(false));
-
-        return builder.ToString();
-    }
-
-    private static async Task<string> TranslateChunkAsync(string text, CancellationToken cancellationToken)
-    {
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(FreeTimeout);
-
-        try
-        {
-            return await TranslateTextAsync(text, TranslationEngine.GoogleFree, timeoutCts.Token)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new TimeoutException($"Free translate timeout after {FreeTimeout.TotalSeconds:0}s");
-        }
-    }
-
-    private static async Task<string> TranslateTextAsync(string q, TranslationEngine engine,
-        CancellationToken cancellationToken)
-    {
-        int millisecondsDelay;
-        var nv = new NameValueCollection();
-        switch (engine)
-        {
-            case TranslationEngine.Baidu:
-                millisecondsDelay = 1000; // Limit Baidu API request rate to 1 rps.
-                nv.Add(new NameValueCollection
-                {
-                    { "baidu-app-id", Configuration.BaiduAppId },
-                    { "baidu-app-key", Configuration.BaiduAppKey }
-                });
-                break;
-            case TranslationEngine.Google:
-                millisecondsDelay = 100; // Limit Google API request rate to 10 rps.
-                nv.Add(new NameValueCollection
-                {
-                    { "google-api-key", Configuration.GoogleApiKey },
-                    { "google-api-url", Configuration.GoogleApiUrl }
-                });
-                break;
-            case TranslationEngine.GoogleFree:
-                millisecondsDelay = 100;
-                nv.Add(new NameValueCollection());
-                break;
-            case TranslationEngine.DeepL:
-                millisecondsDelay = 100;
-                nv.Add(new NameValueCollection
-                {
-                    { "deepl-api-key", Configuration.DeepLApiKey },
-                    { "deepl-api-url", Configuration.DeepLApiUrl }
-                });
-                break;
-            case TranslationEngine.OpenAi:
-                millisecondsDelay = 1000;
-                var model = await OpenAiHelper.ResolveModelAsync(cancellationToken).ConfigureAwait(false);
-                nv.Add(new NameValueCollection
-                {
-                    { "openai-api-key", Configuration.OpenAiApiKey },
-                    { "openai-api-url", Configuration.OpenAiApiUrl },
-                    { "openai-model", model }
-                });
-                break;
-            default:
-                throw new ArgumentException($"Invalid translation engine: {engine}");
-        }
-
-        await Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            async Task<string> TranslateWithDelay()
-            {
-                await Task.Delay(millisecondsDelay, cancellationToken).ConfigureAwait(false);
-                return (await ApiClient
-                    .TranslateAsync(q, AutoLanguageCode, TargetLanguage, engine.ToString(), nv, cancellationToken)
-                    .ConfigureAwait(false)).TranslatedText;
-            }
-
-            return await RetryAsync(TranslateWithDelay, 5).ConfigureAwait(false);
-        }
-        finally
-        {
-            Semaphore.Release();
-        }
-    }
-
-    private static bool CanFallbackToAi()
-    {
-        if (Configuration.TranslationEngine == TranslationEngine.OpenAi)
-            return false;
-
-        return !string.IsNullOrWhiteSpace(Configuration.OpenAiApiKey);
-    }
-
-    /// <summary>
-    /// Splits text into chunks no longer than <paramref name="maxLength"/>,
-    /// preferring natural boundaries so sentences are not cut in half.
-    /// </summary>
-    private static List<string> SplitText(string text, int maxLength)
-    {
-        var chunks = new List<string>();
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-        {
-            chunks.Add(text ?? string.Empty);
-            return chunks;
-        }
-
-        var start = 0;
-        while (start < text.Length)
-        {
-            if (text.Length - start <= maxLength)
-            {
-                chunks.Add(text.Substring(start));
-                break;
-            }
-
-            var end = start + maxLength;
-            var cut = FindCutPoint(text, start, end);
-            chunks.Add(text.Substring(start, cut - start));
-            start = cut;
-        }
-
-        return chunks;
-    }
-
-    private static int FindCutPoint(string text, int start, int end)
-    {
-        for (var i = end; i > start; i--)
-        {
-            switch (text[i - 1])
-            {
-                case '\n':
-                case '>': // End of an inline tag such as <br>.
-                case '。':
-                case '！':
-                case '？':
-                case '.':
-                case '!':
-                case '?':
-                    return i;
-            }
-        }
-
-        return end;
-    }
-
-    private static async Task<T> RetryAsync<T>(Func<Task<T>> func, int retryCount)
-    {
-        while (true)
-        {
-            try
-            {
-                return await func().ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Never swallow cancellation, otherwise timeouts and shutdown are ignored.
-                throw;
-            }
-            catch when (--retryCount > 0)
-            {
-            }
         }
     }
 }

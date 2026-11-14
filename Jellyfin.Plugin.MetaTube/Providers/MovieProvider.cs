@@ -40,9 +40,9 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
     private static readonly ConcurrentDictionary<string, Metadata.MovieInfo> _aggregationCache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // 演员身份解析：别名表 → 演员搜索/详情 → 回写；进程级缓存。
+    // 演员身份解析：别名表 → 演员搜索/详情 → 候选池回写；进程级缓存。
     private static readonly ActorIdentityResolver ActorResolver = new(
-        new ServerActorAliasStore(), new ServerActorDirectory(), new TermActorNameTranslator());
+        new ServerActorAliasStore(), new ServerActorDirectory());
 
 #if __EMBY__
     public MetadataFeatures[] Features => new[]
@@ -101,13 +101,13 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         if (Configuration.EnableRealActorNames)
             await ConvertToRealActorNames(m, cancellationToken);
 
-        // 解析演员身份：拆出显示名/搜索名，查别名表，未命中走演员搜索与详情并回写。
-        // 同一个 pid 的多种写法只保留一位；不同演员译成同名时由解析器回退原名。
-        var resolvedActors = await ActorResolver.ResolveAllAsync(m.Actors, Configuration.TranslateActor,
-            TranslationHelper.TargetLanguage, cancellationToken, message => Logger.Info("{0}", message));
-        m.Actors = resolvedActors.Select(actor => actor.DisplayName).ToArray();
+        // 解析演员身份：拆出搜索名/候选名，查别名表，未命中走演员搜索与详情并回写候选池。
+        // 同一个 pid 的多种写法只保留一位；显示名一律用服务端汉字优选的艺名。
+        var resolvedActors = await ActorResolver.ResolveAllAsync(m.Actors, cancellationToken,
+            message => Logger.Info("{0}", message));
+        m.Actors = resolvedActors.Select(actor => actor.Name).ToArray();
 
-        // Translate movie info（标题/简介/系列/类别；演员已由解析器处理）。
+        // Translate movie info（标题/简介/系列/类别；演员名不翻译）。
         if (TranslationHelper.IsEnabled)
             await TranslateMovieInfo(m, cancellationToken);
 
@@ -211,7 +211,7 @@ public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieI
         {
             var actor = new PersonInfo
             {
-                Name = resolvedActor.DisplayName,
+                Name = resolvedActor.Name,
 #if __EMBY__
                 Type = PersonType.Actor,
 #else

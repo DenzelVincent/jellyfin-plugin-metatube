@@ -283,7 +283,7 @@ public static class ApiClient
     }
 
     /// <summary>
-    /// 按演员来源 pid 回写名字与译名，返回实际生效的身份与名字。
+    /// 按演员来源 pid 回写候选名字池，返回实际生效的身份与艺名。
     /// </summary>
     public static async Task<ActorAliasResult> SaveActorAliasAsync(ActorAliasRequest body,
         CancellationToken cancellationToken)
@@ -305,9 +305,6 @@ public static class ApiClient
         using var request = CreateRequest(HttpMethod.Post, apiUrl, true);
         request.Content = JsonContent.Create(body);
         using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new ActorAliasApiUnavailableException();
 
         var apiResponse = (await response.Content!
             .ReadFromJsonAsync<ResponseInfo<ActorAliasLookupResult>>(cancellationToken: cancellationToken)
@@ -331,10 +328,6 @@ public static class ApiClient
             request.Content = JsonContent.Create(body);
 
         using var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-
-        // 旧服务端没有这个路由：404 表示不支持别名表，上层降级为直接搜索。
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new ActorAliasApiUnavailableException();
 
         var apiResponse = (await response.Content!
             .ReadFromJsonAsync<ResponseInfo<ActorAliasResult>>(cancellationToken: cancellationToken)

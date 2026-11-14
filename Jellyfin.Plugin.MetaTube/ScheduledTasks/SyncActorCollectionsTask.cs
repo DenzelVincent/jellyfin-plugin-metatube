@@ -114,7 +114,7 @@ public class SyncActorCollectionsTask : IScheduledTask
         using var collectionLock = await ActorCollectionLock.AcquireAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        // 先把演员条目的当前名字同步回影片演职表：在演员页手动修正译名后，
+        // 先把演员条目的当前名字同步回影片演职表：在演员页手动修正名字后，
         // 跑一次本任务即可让影片页与合集名跟上。
         var syncedMovies = await SyncPeopleNamesAsync(movies, cancellationToken).ConfigureAwait(false);
         if (syncedMovies > 0)
@@ -270,8 +270,8 @@ public class SyncActorCollectionsTask : IScheduledTask
     }
 
     /// <summary>
-    /// 把影片演职表里的演员名同步成 Person 条目当前名字（演员页手动修正译名后生效），
-    /// 并把新名字作为译名写回服务端演员表，避免下次重刮又被旧译名覆盖。
+    /// 把影片演职表里的演员名同步成 Person 条目当前名字（演员页手动修正后生效），
+    /// 并把新名字作为艺名写回服务端演员表（标 manual，此后自动升级不碰它）。
     /// 只处理本次扫描到的 MetaTube 影片。
     /// </summary>
     private async Task<int> SyncPeopleNamesAsync(IReadOnlyCollection<BaseItem> movies,
@@ -302,7 +302,7 @@ public class SyncActorCollectionsTask : IScheduledTask
                 var oldName = personInfo.Name;
                 personInfo.Name = newName;
                 changed = true;
-                await WriteBackActorTranslationAsync(oldName, newName, person, writtenActors, cancellationToken)
+                await WriteBackActorNameAsync(oldName, newName, person, writtenActors, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -316,23 +316,16 @@ public class SyncActorCollectionsTask : IScheduledTask
         return updatedMovies;
     }
 
-    private async Task WriteBackActorTranslationAsync(string oldName, string newName, Person person,
+    private async Task WriteBackActorNameAsync(string oldName, string newName, Person person,
         ISet<string> writtenActors, CancellationToken cancellationToken)
     {
-        // 旧演职名里的括号内是艺名；新名字若也被改成「译名（艺名）」，只取括号前的译名。
-        var stage = ActorNameHelper.Parse(oldName).SearchName;
-        if (string.IsNullOrWhiteSpace(stage))
-            stage = oldName;
-        var translated = ActorNameHelper.Parse(newName).DisplayName;
-        if (string.IsNullOrWhiteSpace(translated))
-            translated = newName;
-
         var pid = person.GetPid(Plugin.ProviderId);
         var provider = pid.Provider;
         var actorId = pid.Id;
 
-        // Person 上没有 pid 时，用旧名字/新名字去服务端字典反查身份；
+        // Person 上没有 pid 时，用旧名字/新名字原样去服务端字典反查身份（不解析括号）；
         // 手动改的演员大多是老条目，不能因为缺 pid 就跳过写回。
+        // 遗留「译名（艺名）」复合旧名查不到 stage_key 时记 Warn，由用户删旧 Person 重刮。
         if (string.IsNullOrEmpty(provider) || string.IsNullOrEmpty(actorId))
         {
             var resolved = await LookupActorPersonAsync(oldName, cancellationToken).ConfigureAwait(false)
@@ -345,21 +338,18 @@ public class SyncActorCollectionsTask : IScheduledTask
 
             provider = resolved.Provider;
             actorId = resolved.ActorId;
-            if (!string.IsNullOrWhiteSpace(resolved.StageName))
-                stage = resolved.StageName;
         }
 
         var key = provider + ":" + actorId;
-        if (!string.IsNullOrEmpty(provider) && !string.IsNullOrEmpty(actorId) && !writtenActors.Add(key))
+        if (!writtenActors.Add(key))
             return;
 
         try
         {
+            // 新名字整体作为候选池提交；服务端标 manual，复合旧名护栏也在那边。
             await ApiClient.SaveActorAliasAsync(new ActorAliasRequest
             {
-                StageName = stage.Trim(),
-                TranslatedName = translated.Trim(),
-                TranslationSource = "source",
+                Names = new[] { newName.Trim() },
                 Provider = provider,
                 ActorId = actorId,
                 Source = "person-edit"
@@ -371,7 +361,7 @@ public class SyncActorCollectionsTask : IScheduledTask
         }
         catch (Exception e)
         {
-            _logger.Warn("Write back actor translation failed: {0} ({1})", newName, e.Message);
+            _logger.Warn("Write back actor name failed: {0} ({1})", newName, e.Message);
         }
     }
 

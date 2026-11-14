@@ -298,70 +298,38 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool TranslateGenre { get; set; } = false;
 
 #if __EMBY__
-    [DisplayName("翻译演员名")]
+    [DisplayName("辅翻译引擎")]
+    [Description("主引擎（OpenAI）失败或未配置时回退到这里；选「无」则不回退。")]
 #endif
-    public bool TranslateActor { get; set; } = false;
-
-#if __EMBY__
-    [DisplayName("翻译引擎")]
-#endif
-    public TranslationEngine TranslationEngine { get; set; } = TranslationEngine.Baidu;
+    public SecondaryTranslationEngine SecondaryTranslationEngine { get; set; } = SecondaryTranslationEngine.None;
 
 #if __EMBY__
     [DisplayName("百度 App ID")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.Baidu)]
+    [VisibleCondition(nameof(SecondaryTranslationEngine), ValueCondition.IsEqual, SecondaryTranslationEngine.Baidu)]
 #endif
     public string BaiduAppId { get; set; } = string.Empty;
 
 #if __EMBY__
     [DisplayName("百度 App Key")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.Baidu)]
+    [VisibleCondition(nameof(SecondaryTranslationEngine), ValueCondition.IsEqual, SecondaryTranslationEngine.Baidu)]
 #endif
     public string BaiduAppKey { get; set; } = string.Empty;
 
 #if __EMBY__
-    [DisplayName("谷歌 API Key")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.Google)]
-#endif
-    public string GoogleApiKey { get; set; } = string.Empty;
-
-#if __EMBY__
-    [DisplayName("谷歌 API 地址")]
-    [Description("自定义谷歌翻译 API 地址。（可选）")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.Google)]
-#endif
-    public string GoogleApiUrl { get; set; } = string.Empty;
-
-#if __EMBY__
-    [DisplayName("DeepL API Key")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.DeepL)]
-#endif
-    public string DeepLApiKey { get; set; } = string.Empty;
-
-#if __EMBY__
-    [DisplayName("DeepL API 地址")]
-    [Description("兼容 DeepL 的自定义 API 地址。（可选）")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.DeepL)]
-#endif
-    public string DeepLApiUrl { get; set; } = string.Empty;
-
-#if __EMBY__
     [DisplayName("OpenAI API Key")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.OpenAi)]
+    [Description("主翻译引擎：填写密钥即启用；留空则跳过主引擎，直接用辅引擎。")]
 #endif
     public string OpenAiApiKey { get; set; } = string.Empty;
 
 #if __EMBY__
     [DisplayName("OpenAI API 地址")]
     [Description("兼容 OpenAI 的自定义 API 地址，需包含版本路径（例如 https://api.openai.com/v1）。（可选）")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.OpenAi)]
 #endif
     public string OpenAiApiUrl { get; set; } = string.Empty;
 
 #if __EMBY__
     [DisplayName("OpenAI 模型")]
     [Description("留空时自动从 API 地址的 /v1/models 中选取首个可用对话模型；填写后优先使用填写的模型。")]
-    [VisibleCondition(nameof(TranslationEngine), ValueCondition.IsEqual, TranslationEngine.OpenAi)]
 #endif
     public string OpenAiModel { get; set; } = string.Empty;
 

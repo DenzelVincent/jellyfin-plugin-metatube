@@ -11,12 +11,13 @@ internal sealed class ServerTermStore : ITermStore
         return info?.Found == true ? info.TranslatedText : null;
     }
 
-    public async Task<string> SaveAsync(TermKind kind, string source, string translatedText,
+    public async Task<string> SaveAsync(TermKind kind, string source, string translatedText, string engine,
         CancellationToken cancellationToken)
     {
+        // engine 记实际产出译文的引擎（主/辅回退后可能不同），不是配置里选的那个。
         var info = await ApiClient
             .SaveTranslationTermAsync(KindName(kind), source, TranslationHelper.TargetLanguage, translatedText,
-                Plugin.Instance.Configuration.TranslationEngine.ToString(), cancellationToken)
+                engine, cancellationToken)
             .ConfigureAwait(false);
         return info?.TranslatedText;
     }
@@ -25,7 +26,6 @@ internal sealed class ServerTermStore : ITermStore
     {
         return kind switch
         {
-            TermKind.Actor => "actor",
             TermKind.Series => "series",
             TermKind.Genre => "genre",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
