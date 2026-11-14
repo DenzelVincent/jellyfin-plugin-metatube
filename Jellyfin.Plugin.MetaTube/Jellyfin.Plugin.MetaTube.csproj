@@ -7,7 +7,8 @@
         <AssemblyName>MetaTube</AssemblyName>
         <Authors>MetaTube</Authors>
         <Description>MetaTube Plugin for Jellyfin/Emby</Description>
-        <Version>$([System.DateTime]::UtcNow.ToString(yyyy.Mdd.Hmm.0))</Version>
+        <!-- 版本号时间戳固定北京时间（UTC+8）：CI runner 为 UTC，显式 +8 小时，中国无夏令时 -->
+        <Version>$([System.DateTime]::UtcNow.AddHours(8).ToString(yyyy.Mdd.Hmm.0))</Version>
         <Copyright>Copyright © 2023 MetaTube</Copyright>
         <RepositoryType>Git</RepositoryType>
         <RepositoryUrl>https://github.com/DenzelVincent/jellyfin-plugin-metatube.git</RepositoryUrl>

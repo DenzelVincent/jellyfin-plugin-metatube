@@ -35,7 +35,8 @@ jobs:
             echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
             echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
           else
-            v=$(date -u '+%Y.%-m%d.%-H%M.0')
+            # 版本号时间戳固定北京时间（UTC+8），与 csproj、打 tag 口径一致
+            v=$(TZ='Asia/Shanghai' date '+%Y.%-m%d.%-H%M.0')
             echo "tag=v$v" >> $GITHUB_OUTPUT
             echo "version=$v" >> $GITHUB_OUTPUT
           fi
